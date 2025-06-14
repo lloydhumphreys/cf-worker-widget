@@ -9,10 +9,11 @@ import SwiftUI
 
 @main
 struct WorkerBuildHistoryApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     let persistenceController = PersistenceController.shared
 
     var body: some Scene {
-        WindowGroup {
+        Settings {
             ContentView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
         }
