@@ -38,6 +38,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window?.isReleasedWhenClosed = false
         window?.collectionBehavior = .moveToActiveSpace
         window?.level = .floating
+        window?.backgroundColor = NSColor.clear
+        window?.isOpaque = false
+        window?.contentView?.wantsLayer = true
+        window?.contentView?.layer?.cornerRadius = 12
+        window?.contentView?.layer?.masksToBounds = true
         return window.unsafelyUnwrapped
     }
     

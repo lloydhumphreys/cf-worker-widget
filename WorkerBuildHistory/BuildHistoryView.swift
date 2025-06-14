@@ -5,101 +5,106 @@ struct BuildHistoryView: View {
     @StateObject private var dataManager = DataManager.shared
     
     var body: some View {
-        VStack(spacing: 8) {
-            HStack {
-                Button(action: { 
-                    Task {
-                        await dataManager.refreshBuildHistory(force: true)
-                    }
-                }) {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 14))
-                }
-                .buttonStyle(.plain)
-                .disabled(dataManager.isLoading)
-                .padding(8)
-                
-                Spacer()
-                
-                Button(action: { 
-                    if !showingSettings {
-                        openSettings()
-                    }
-                }) {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 14))
-                }
-                .buttonStyle(.plain)
-                .padding(8)
-            }
+        ZStack {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color(NSColor.controlBackgroundColor))
+                .stroke(Color(NSColor.separatorColor), lineWidth: 1)
             
-            ScrollView {
-                LazyVStack(spacing: 0) {
-                    if dataManager.isLoading {
-                        HStack {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                            Text("Loading build history...")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
+            VStack(spacing: 8) {
+                HStack {
+                    Button(action: { 
+                        Task {
+                            await dataManager.refreshBuildHistory(force: true)
                         }
-                        .padding()
-                        .frame(maxWidth: .infinity, alignment: .center)
-                    } else if let error = dataManager.error {
-                        VStack {
-                            Image(systemName: "exclamationmark.triangle")
-                                .foregroundColor(.orange)
-                            Text("Error: \(error)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.center)
+                    }) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 14))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(dataManager.isLoading)
+                    .padding(8)
+                    
+                    Spacer()
+                    
+                    Button(action: { 
+                        if !showingSettings {
+                            openSettings()
                         }
-                        .padding()
-                    } else if dataManager.buildHistory.isEmpty {
-                        VStack {
-                            Image(systemName: "tray")
-                                .foregroundColor(.secondary)
-                            Text("No build history found")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Text("Configure workers and pages in settings")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
-                        .padding()
-                        .frame(maxWidth: .infinity, alignment: .center)
-                    } else {
-                        ForEach(Array(dataManager.buildHistory.prefix(10).enumerated()), id: \.element.id) { index, buildStatus in
-                            VStack(spacing: 0) {
-                                BuildHistoryRow(
-                                    buildNumber: buildStatus.projectName,
-                                    status: buildStatus.status.displayName(for: buildStatus.projectType),
-                                    timestamp: formatRelativeTime(buildStatus.createdAt),
-                                    statusType: buildStatus.status,
-                                    projectType: buildStatus.projectType,
-                                    commitHash: buildStatus.commitHash,
-                                    branch: buildStatus.branch
-                                )
-                                
-                                if index < dataManager.buildHistory.prefix(10).count - 1 {
-                                    Divider()
-                                        .padding(.leading, 12)
+                    }) {
+                        Image(systemName: "gearshape")
+                            .font(.system(size: 14))
+                    }
+                    .buttonStyle(.plain)
+                    .padding(8)
+                }
+                .background(Color(NSColor.controlBackgroundColor))
+                
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        if dataManager.isLoading {
+                            HStack {
+                                ProgressView()
+                                    .scaleEffect(0.8)
+                                Text("Loading build history...")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .center)
+                        } else if let error = dataManager.error {
+                            VStack {
+                                Image(systemName: "exclamationmark.triangle")
+                                    .foregroundColor(.orange)
+                                Text("Error: \(error)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                    .multilineTextAlignment(.center)
+                            }
+                            .padding()
+                        } else if dataManager.buildHistory.isEmpty {
+                            VStack {
+                                Image(systemName: "tray")
+                                    .foregroundColor(.secondary)
+                                Text("No build history found")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Text("Configure workers and pages in settings")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                            .padding()
+                            .frame(maxWidth: .infinity, alignment: .center)
+                        } else {
+                            ForEach(Array(dataManager.buildHistory.prefix(10).enumerated()), id: \.element.id) { index, buildStatus in
+                                VStack(spacing: 0) {
+                                    BuildHistoryRow(
+                                        buildNumber: buildStatus.projectName,
+                                        status: buildStatus.status.displayName(for: buildStatus.projectType),
+                                        timestamp: formatRelativeTime(buildStatus.createdAt),
+                                        statusType: buildStatus.status,
+                                        projectType: buildStatus.projectType,
+                                        commitHash: buildStatus.commitHash,
+                                        branch: buildStatus.branch
+                                    )
+                                    
+                                    if index < dataManager.buildHistory.prefix(10).count - 1 {
+                                        Divider()
+                                            .padding(.leading, 12)
+                                    }
                                 }
                             }
                         }
                     }
                 }
+                .background(Color.white)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
             }
-            .background(Color.white)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .padding(4)
         }
-        .padding(12)
         .frame(width: 600, height: 500)
-        .background(Color.gray.opacity(0.1)) // Light grey background
-        .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(
+        .mask(
             RoundedRectangle(cornerRadius: 12)
-                .stroke(Color(NSColor.separatorColor), lineWidth: 1)
+                .fill(Color.black)
         )
         .sheet(isPresented: $showingSettings) {
             SettingsView()
@@ -171,7 +176,7 @@ struct BuildHistoryRow: View {
             HStack(spacing: 8) {
                 if let branch = branch {
                     HStack(spacing: 2) {
-                        Image(systemName: "arrow.branch")
+                        Image(systemName: branch.lowercased() == "wrangler" ? "terminal.fill" : "arrow.branch")
                             .font(.caption2)
                             .foregroundColor(.secondary)
                         Text(branch)
