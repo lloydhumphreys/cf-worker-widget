@@ -57,9 +57,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func statusBarButtonClicked(_ sender: NSStatusBarButton) {
         print("Menu item clicked")
         
-        // Set the window dimensions
-        let windowWidth: CGFloat = 300
-        let windowHeight: CGFloat = 400  // Updated to match BuildHistoryView height
+        // Set the window dimensions - larger to accommodate settings sheet
+        let windowWidth: CGFloat = 600
+        let windowHeight: CGFloat = 500
         
         // Calculate window position
         let mouseLocation = NSEvent.mouseLocation
