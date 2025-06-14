@@ -22,14 +22,20 @@ class CacheManager {
     // MARK: - Build History Cache
     
     func getCachedBuildHistory() -> [BuildStatus]? {
-        guard let data = userDefaults.data(forKey: buildHistoryKey),
-              let buildHistory = try? JSONDecoder().decode([BuildStatus].self, from: data) else {
-            print("📄 CacheManager: No cached build history found")
+        print("🔍 CacheManager: Checking for cached data...")
+        
+        guard let data = userDefaults.data(forKey: buildHistoryKey) else {
+            print("📄 CacheManager: No cached data found in UserDefaults")
+            return nil
+        }
+        
+        guard let buildHistory = try? JSONDecoder().decode([BuildStatus].self, from: data) else {
+            print("❌ CacheManager: Failed to decode cached data")
             return nil
         }
         
         let cacheTimestamp = userDefaults.double(forKey: cacheTimestampKey)
-        let cacheAge = Date().timeIntervalSince1970 - cacheTimestamp
+        let cacheAge = cacheTimestamp > 0 ? Date().timeIntervalSince1970 - cacheTimestamp : Double.infinity
         
         if cacheAge > maxCacheAge {
             print("⏰ CacheManager: Cache expired (age: \(Int(cacheAge))s)")

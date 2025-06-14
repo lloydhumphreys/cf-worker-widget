@@ -124,36 +124,36 @@ class DataManager: ObservableObject {
     }
     
     func smartRefresh() async {
-        print("🧠 DataManager: Starting smart refresh...")
-        
-        // Always show cached data first
+        // Always show cached data first for instant loading
         if let cachedData = CacheManager.shared.getCachedBuildHistory() {
             buildHistory = cachedData
-            print("⚡ DataManager: Loaded \(cachedData.count) cached items")
+            print("⚡ DataManager: Loaded \(cachedData.count) cached items instantly")
+        } else {
+            print("📭 DataManager: No cached data available")
         }
         
         // Check which projects need updating
         let projectsNeedingRefresh = CacheManager.shared.getProjectsNeedingRefresh(from: buildHistory)
         
         if projectsNeedingRefresh.isEmpty {
-            print("✅ DataManager: All projects are up to date")
+            print("✅ DataManager: All projects are up to date, no refresh needed")
             return
         }
         
-        print("🔄 DataManager: Refreshing \(projectsNeedingRefresh.count) projects: \(projectsNeedingRefresh.joined(separator: ", "))")
+        print("🔄 DataManager: Background refresh needed for \(projectsNeedingRefresh.count) projects")
         
-        // Perform selective refresh (for now, still refresh all but with smarter caching)
-        await refreshBuildHistory(force: true)
+        // Only refresh if actually needed, and do it in background
+        await refreshBuildHistory(force: false)
     }
     
     func startPeriodicRefresh() {
         // Prevent multiple timers
         refreshTimer?.invalidate()
         
-        // Smart refresh every 2 minutes
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { _ in
-            Task {
-                await self.smartRefresh()
+        // Smart refresh every 2 minutes - use weak self to prevent retain cycles
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in
+            Task { [weak self] in
+                await self?.smartRefresh()
             }
         }
     }

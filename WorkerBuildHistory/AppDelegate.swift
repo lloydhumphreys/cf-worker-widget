@@ -10,8 +10,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let button = statusBarItem?.button {
             button.action = #selector(statusBarButtonClicked(_:))
             button.target = self
-            button.image = NSImage(systemSymbolName: "cloud", accessibilityDescription: "Worker Build History")
-            button.title = "Worker Build History"
+            
+            if let image = NSImage(systemSymbolName: "cloud", accessibilityDescription: "Worker Build History") {
+                image.size = NSSize(width: 18, height: 18)
+                image.isTemplate = true
+                button.image = image
+            } else {
+                button.title = "WBH"
+            }
+            
+            statusBarItem?.isVisible = true
+            button.appearsDisabled = false
         }
     }
     
@@ -25,8 +34,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     @objc func getOrBuildWindow(size: NSRect) -> NSWindow {
-        if window != nil {
-            return window.unsafelyUnwrapped
+        if let existingWindow = window {
+            return existingWindow
         }
         let contentView = BuildHistoryView()
         window = NSWindow(
@@ -45,7 +54,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window?.contentView?.layer?.masksToBounds = true
         window?.minSize = NSSize(width: 400, height: 300)
         window?.maxSize = NSSize(width: 1000, height: 800)
-        return window.unsafelyUnwrapped
+        
+        // Auto-hide when app loses focus
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(applicationDidResignActive),
+            name: NSApplication.didResignActiveNotification,
+            object: nil
+        )
+        return window!
     }
     
     func toggleWindowVisibility(location: NSPoint) {
@@ -83,5 +100,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ))
         
         toggleWindowVisibility(location: NSPoint(x: windowX, y: windowY))
+    }
+    
+    @objc func applicationDidResignActive(_ notification: Notification) {
+        // Hide window when app loses focus
+        if window?.isVisible == true {
+            window?.orderOut(nil)
+        }
     }
 } 
