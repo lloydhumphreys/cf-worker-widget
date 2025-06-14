@@ -57,6 +57,14 @@ class DataManager: ObservableObject {
     // MARK: - Build History Management
     
     func refreshBuildHistory(force: Bool = false) async {
+        print("🔄 DataManager: Starting build history refresh (force: \(force))...")
+        
+        // Load cached data immediately if available
+        if let cachedData = CacheManager.shared.getCachedBuildHistory() {
+            buildHistory = cachedData
+            print("⚡ DataManager: Loaded \(cachedData.count) cached items instantly")
+        }
+        
         // Rate limiting: don't refresh more than once per minute unless forced
         let timeSinceLastRefresh = Date().timeIntervalSince(lastRefreshTime)
         if !force && timeSinceLastRefresh < minimumRefreshInterval {
@@ -65,7 +73,6 @@ class DataManager: ObservableObject {
         }
         
         lastRefreshTime = Date()
-        print("🔄 DataManager: Starting build history refresh...")
         isLoading = true
         error = nil
         
@@ -101,9 +108,13 @@ class DataManager: ObservableObject {
             // Now load build history for visible items
             print("🏗️ DataManager: Loading build history...")
             await workersViewModel.loadBuildHistory()
-            buildHistory = workersViewModel.buildHistory
+            let newBuildHistory = workersViewModel.buildHistory
             
-            print("✅ DataManager: Loaded \(buildHistory.count) build history items")
+            // Update build history and cache it
+            buildHistory = newBuildHistory
+            CacheManager.shared.cacheBuildHistory(newBuildHistory)
+            
+            print("✅ DataManager: Loaded \(newBuildHistory.count) build history items and cached them")
         } catch {
             print("❌ DataManager: Error refreshing build history: \(error)")
             self.error = error.localizedDescription
@@ -112,14 +123,37 @@ class DataManager: ObservableObject {
         isLoading = false
     }
     
+    func smartRefresh() async {
+        print("🧠 DataManager: Starting smart refresh...")
+        
+        // Always show cached data first
+        if let cachedData = CacheManager.shared.getCachedBuildHistory() {
+            buildHistory = cachedData
+            print("⚡ DataManager: Loaded \(cachedData.count) cached items")
+        }
+        
+        // Check which projects need updating
+        let projectsNeedingRefresh = CacheManager.shared.getProjectsNeedingRefresh(from: buildHistory)
+        
+        if projectsNeedingRefresh.isEmpty {
+            print("✅ DataManager: All projects are up to date")
+            return
+        }
+        
+        print("🔄 DataManager: Refreshing \(projectsNeedingRefresh.count) projects: \(projectsNeedingRefresh.joined(separator: ", "))")
+        
+        // Perform selective refresh (for now, still refresh all but with smarter caching)
+        await refreshBuildHistory(force: true)
+    }
+    
     func startPeriodicRefresh() {
         // Prevent multiple timers
         refreshTimer?.invalidate()
         
-        // Refresh every 5 minutes
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: 300, repeats: true) { _ in
+        // Smart refresh every 2 minutes
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { _ in
             Task {
-                await self.refreshBuildHistory()
+                await self.smartRefresh()
             }
         }
     }

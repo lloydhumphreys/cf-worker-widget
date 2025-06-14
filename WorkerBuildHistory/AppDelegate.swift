@@ -31,7 +31,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let contentView = BuildHistoryView()
         window = NSWindow(
             contentRect: size,
-            styleMask: [.borderless],
+            styleMask: [.borderless, .resizable],
             backing: .buffered,
             defer: false)
         window?.contentView = NSHostingView(rootView: contentView)
@@ -43,6 +43,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window?.contentView?.wantsLayer = true
         window?.contentView?.layer?.cornerRadius = 12
         window?.contentView?.layer?.masksToBounds = true
+        window?.minSize = NSSize(width: 400, height: 300)
+        window?.maxSize = NSSize(width: 1000, height: 800)
         return window.unsafelyUnwrapped
     }
     
@@ -60,17 +62,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     @objc func statusBarButtonClicked(_ sender: NSStatusBarButton) {
-        print("Menu item clicked")
         
         // Set the window dimensions - larger to accommodate settings sheet
-        let windowWidth: CGFloat = 600
+        let windowWidth: CGFloat = 400
         let windowHeight: CGFloat = 500
         
-        // Calculate window position
+        // Calculate window position with spacing from menu bar
         let mouseLocation = NSEvent.mouseLocation
         let screenHeight = NSScreen.main?.frame.height ?? 0
+        let menuBarSpacing: CGFloat = 8 // Add 8px spacing from menu bar
         let windowX = mouseLocation.x - windowWidth / 2
-        let windowY = screenHeight - windowHeight - (getMenuBarHeight() ?? 0)
+        let windowY = screenHeight - windowHeight - (getMenuBarHeight() ?? 0) - menuBarSpacing
         
         // Construct and show/hide the window
         window = getOrBuildWindow(size: NSRect(

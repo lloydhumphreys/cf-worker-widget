@@ -8,7 +8,7 @@ struct BuildHistoryView: View {
         ZStack {
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color(NSColor.controlBackgroundColor))
-                .stroke(Color(NSColor.separatorColor), lineWidth: 1)
+                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
             
             VStack(spacing: 8) {
                 HStack {
@@ -101,7 +101,7 @@ struct BuildHistoryView: View {
             }
             .padding(4)
         }
-        .frame(width: 600, height: 500)
+        .frame(minWidth: 400, minHeight: 300)
         .mask(
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color.black)
@@ -112,9 +112,9 @@ struct BuildHistoryView: View {
         }
         .onAppear {
             dataManager.startPeriodicRefresh()
-            // Load build history on first appearance
+            // Smart refresh on app open - shows cached data instantly, then updates as needed
             Task {
-                await dataManager.refreshBuildHistory(force: true)
+                await dataManager.smartRefresh()
             }
         }
         .onDisappear {
@@ -176,12 +176,12 @@ struct BuildHistoryRow: View {
             HStack(spacing: 8) {
                 if let branch = branch {
                     HStack(spacing: 2) {
-                        Image(systemName: branch.lowercased() == "wrangler" ? "terminal.fill" : "arrow.branch")
+                        Image(systemName: branch.lowercased() == "wrangler" ? "chevron.forward" : "arrow.branch")
                             .font(.caption2)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(branch.lowercased() == "wrangler" ? Color.orange : Color.purple)
                         Text(branch)
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(branch.lowercased() == "wrangler" ? Color.orange : Color.purple)
                     }
                 }
                 
@@ -212,10 +212,10 @@ struct BuildHistoryRow: View {
         Group {
             switch statusType {
             case .success:
-                Image(systemName: "checkmark")
-                    .foregroundColor(.green)
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundColor(Color(red: 0.0, green: 0.6, blue: 0.0))
             case .failure:
-                Image(systemName: "exclamationmark.triangle")
+                Image(systemName: "exclamationmark.triangle.fill")
                     .foregroundColor(.red)
             case .inProgress:
                 Image(systemName: "clock")
@@ -235,11 +235,11 @@ struct BuildHistoryRow: View {
     }
     
     private var statusColor: Color {
-        guard let statusType = statusType else { return .green }
+        guard let statusType = statusType else { return Color.green.opacity(0.8) }
         
         switch statusType {
         case .success:
-            return .green
+            return Color(red: 0.0, green: 0.6, blue: 0.0) // Dark green
         case .failure:
             return .red
         case .inProgress:
