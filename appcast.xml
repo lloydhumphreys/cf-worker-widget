@@ -1,0 +1,32 @@
+<?xml version="1.0" standalone="yes"?>
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:dc="http://purl.org/dc/elements/1.1/" version="2.0">
+    <channel>
+        <title>WorkerWidget</title>
+        <description>Cloudflare Workers &amp; Pages build monitor for macOS</description>
+        <language>en</language>
+        <!--
+            To publish a release:
+            1. Archive the app in Xcode (Product > Archive)
+            2. Export as "Developer ID" signed app
+            3. Create a .zip: ditto -c -k --keepParent WorkerWidget.app WorkerWidget-1.0.0.zip
+            4. Sign the archive: ./bin/sign_update WorkerWidget-1.0.0.zip
+            5. Add an <item> below with the sparkle:edSignature from step 4
+            6. Upload the .zip to the GitHub Release
+            7. Commit the updated appcast.xml
+
+            Or use Sparkle's generate_appcast tool to automate steps 4-7.
+        -->
+    </channel>
+        <item>
+            <title>Version 1.0.0</title>
+            <pubDate>Wed, 01 Apr 2026 20:52:39 +0200</pubDate>
+            <enclosure
+                url="https://github.com/lloydhumphreys/cf-worker-widget/releases/download/v1.0.0/WorkerWidget-1.0.0.zip"
+                sparkle:version="1.0.0"
+                sparkle:shortVersionString="1.0.0"
+                sparkle:edSignature="mQVwFA9rutbNKvBfDGwvO4enIEXUQb3bmRlYnfrYgxO6nlq2P7Gi9NnzOHtuVjkI9uDnAXJ2no3EDCC2qBTNAA=="
+                length="1431557"
+                type="application/octet-stream"
+            />
+        </item>
+</rss>
