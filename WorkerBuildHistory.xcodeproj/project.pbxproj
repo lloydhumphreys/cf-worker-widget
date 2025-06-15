@@ -10,9 +10,22 @@
 		6E69E6212DFDA34F00599B95 /* WorkerBuildHistory.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = WorkerBuildHistory.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		6E6998FB2DFE28F800E275B0 /* Exceptions for "WorkerBuildHistory" folder in "WorkerBuildHistory" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 6E69E6202DFDA34F00599B95 /* WorkerBuildHistory */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		6E69E6232DFDA34F00599B95 /* WorkerBuildHistory */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				6E6998FB2DFE28F800E275B0 /* Exceptions for "WorkerBuildHistory" folder in "WorkerBuildHistory" target */,
+			);
 			path = WorkerBuildHistory;
 			sourceTree = "<group>";
 		};
@@ -258,6 +271,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WorkerBuildHistory/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -285,6 +299,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WorkerBuildHistory/Info.plist;
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct BuildHistoryView: View {
     @State private var showingSettings = false
+    @State private var autoRefreshEnabled = true
     @StateObject private var dataManager = DataManager.shared
     
     var body: some View {
@@ -23,6 +24,20 @@ struct BuildHistoryView: View {
                     .buttonStyle(.plain)
                     .disabled(dataManager.isLoading)
                     .padding(8)
+                    
+                    Button(action: {
+                        autoRefreshEnabled.toggle()
+                        dataManager.setAutoRefresh(enabled: autoRefreshEnabled)
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: autoRefreshEnabled ? "clock.arrow.trianglehead.2.counterclockwise.rotate.90" : "pause.fill")
+                                .font(.system(size: 14))
+                            Text(autoRefreshEnabled ? "Auto refresh on" : "Auto refresh off")
+                                .font(.system(size: 12))
+                        }
+                        .foregroundColor(autoRefreshEnabled ? .blue : .secondary)
+                    }
+                    .buttonStyle(.plain)
                     
                     Spacer()
                     
@@ -111,7 +126,7 @@ struct BuildHistoryView: View {
                 .frame(width: 550, height: 450)
         }
         .onAppear {
-            dataManager.startPeriodicRefresh()
+            dataManager.setAutoRefresh(enabled: autoRefreshEnabled)
             // Smart refresh on app open - shows cached data instantly, then updates as needed
             Task {
                 await dataManager.smartRefresh()

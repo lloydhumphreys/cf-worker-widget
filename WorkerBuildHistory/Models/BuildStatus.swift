@@ -134,6 +134,7 @@ extension WorkerDeployment {
         
         // Determine status based on deployment strategy and version percentages
         let deploymentStatus: BuildStatus.BuildStatusType
+        
         if strategy.lowercased() == "percentage" && versions.allSatisfy({ $0.percentage == 100 }) {
             deploymentStatus = .success // Fully deployed
         } else if strategy.lowercased() == "percentage" && versions.contains(where: { $0.percentage < 100 }) {
@@ -162,12 +163,14 @@ extension WorkerDeployment {
 extension PagesDeployment {
     func toBuildStatus(projectName: String) -> BuildStatus {
         let status: BuildStatus.BuildStatusType
-        switch self.latest_stage.status.lowercased() {
+        let rawStatus = self.latest_stage.status.lowercased()
+        
+        switch rawStatus {
         case "success":
             status = .success
         case "failure", "failed":
             status = .failure
-        case "active", "building":
+        case "active", "building", "in_progress", "deploying":
             status = .inProgress
         case "canceled", "cancelled":
             status = .canceled

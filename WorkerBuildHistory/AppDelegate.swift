@@ -6,6 +6,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var window: NSWindow?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Request notification permissions
+        NotificationManager.shared.requestNotificationPermission()
+        
         statusBarItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusBarItem?.button {
             button.action = #selector(statusBarButtonClicked(_:))
