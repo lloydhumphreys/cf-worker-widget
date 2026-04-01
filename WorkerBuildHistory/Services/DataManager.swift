@@ -226,8 +226,42 @@ class DataManager: ObservableObject {
         return merged.sorted { $0.createdAt > $1.createdAt }
     }
     
+    // MARK: - Detail Builds
+
+    func fetchRecentBuilds(for project: BuildStatus) async -> [BuildStatus] {
+        guard let accountId = workersViewModel.selectedAccountId else { return [] }
+
+        if project.projectType == .worker {
+            // Find worker tag
+            if let worker = workersViewModel.workers.first(where: { $0.id == project.projectName }),
+               let tag = worker.tag {
+                do {
+                    let builds = try await CloudflareService.shared.fetchWorkerBuilds(accountId: accountId, workerTag: tag, limit: 10)
+                    return builds.map { $0.toBuildStatus(workerName: project.projectName) }
+                } catch {
+                    return []
+                }
+            }
+            // Fallback to deployments
+            do {
+                let deployments = try await CloudflareService.shared.fetchWorkerDeployments(accountId: accountId, scriptName: project.projectName, limit: 10)
+                return deployments.map { $0.toBuildStatus(workerName: project.projectName) }
+            } catch {
+                return []
+            }
+        } else {
+            // Pages project
+            do {
+                let deployments = try await CloudflareService.shared.fetchPagesDeployments(accountId: accountId, projectName: project.projectName, limit: 10)
+                return deployments.map { $0.toBuildStatus(projectName: project.projectName) }
+            } catch {
+                return []
+            }
+        }
+    }
+
     // MARK: - Settings Integration
-    
+
     func onWorkersLoaded() {
         applyVisibilitySettings()
         // Don't auto-refresh on worker load to prevent rate limiting

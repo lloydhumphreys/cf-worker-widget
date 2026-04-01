@@ -3,42 +3,69 @@ import SwiftUI
 struct BuildHistoryView: View {
     @State private var showingSettings = false
     @State private var autoRefreshEnabled = true
+    @State private var selectedProject: BuildStatus?
+    @State private var detailBuilds: [BuildStatus] = []
+    @State private var loadingDetail = false
     @StateObject private var dataManager = DataManager.shared
 
     var body: some View {
         VStack(spacing: 0) {
             // Toolbar
             HStack(spacing: 12) {
-                Button(action: {
-                    Task {
-                        await dataManager.refreshBuildHistory(force: true)
+                if selectedProject != nil {
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            selectedProject = nil
+                            detailBuilds = []
+                        }
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text("Back")
+                                .font(.system(size: 12, weight: .medium))
+                        }
                     }
-                }) {
-                    Image(systemName: "arrow.clockwise")
-                        .font(.system(size: 13, weight: .medium))
-                        .rotationEffect(.degrees(dataManager.isLoading ? 360 : 0))
-                        .animation(dataManager.isLoading ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: dataManager.isLoading)
-                }
-                .buttonStyle(.plain)
-                .foregroundColor(.secondary)
-                .disabled(dataManager.isLoading)
-
-                Button(action: {
-                    autoRefreshEnabled.toggle()
-                    dataManager.setAutoRefresh(enabled: autoRefreshEnabled)
-                }) {
-                    HStack(spacing: 4) {
-                        Circle()
-                            .fill(autoRefreshEnabled ? Color.green : Color.secondary.opacity(0.4))
-                            .frame(width: 6, height: 6)
-                        Text(autoRefreshEnabled ? "Auto" : "Paused")
-                            .font(.system(size: 11, weight: .medium))
-                    }
+                    .buttonStyle(.plain)
                     .foregroundColor(.secondary)
-                }
-                .buttonStyle(.plain)
 
-                Spacer()
+                    Spacer()
+
+                    Text(selectedProject?.projectName ?? "")
+                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                        .lineLimit(1)
+                } else {
+                    Button(action: {
+                        Task {
+                            await dataManager.refreshBuildHistory(force: true)
+                        }
+                    }) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 13, weight: .medium))
+                            .rotationEffect(.degrees(dataManager.isLoading ? 360 : 0))
+                            .animation(dataManager.isLoading ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: dataManager.isLoading)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(.secondary)
+                    .disabled(dataManager.isLoading)
+
+                    Button(action: {
+                        autoRefreshEnabled.toggle()
+                        dataManager.setAutoRefresh(enabled: autoRefreshEnabled)
+                    }) {
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(autoRefreshEnabled ? Color.green : Color.secondary.opacity(0.4))
+                                .frame(width: 6, height: 6)
+                            Text(autoRefreshEnabled ? "Auto" : "Paused")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+
+                    Spacer()
+                }
 
                 Button(action: {
                     if !showingSettings {
@@ -59,51 +86,10 @@ struct BuildHistoryView: View {
             // Content
             ScrollView {
                 LazyVStack(spacing: 2) {
-                    if dataManager.isLoading && dataManager.buildHistory.isEmpty {
-                        VStack(spacing: 8) {
-                            ProgressView()
-                                .scaleEffect(0.7)
-                            Text("Loading...")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(.secondary)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 40)
-                    } else if let error = dataManager.error, dataManager.buildHistory.isEmpty {
-                        VStack(spacing: 6) {
-                            Image(systemName: "exclamationmark.triangle")
-                                .font(.system(size: 20, weight: .light))
-                                .foregroundColor(.orange)
-                            Text(error)
-                                .font(.system(size: 11))
-                                .foregroundColor(.secondary)
-                                .multilineTextAlignment(.center)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 40)
-                    } else if dataManager.buildHistory.isEmpty {
-                        VStack(spacing: 6) {
-                            Image(systemName: "tray")
-                                .font(.system(size: 20, weight: .light))
-                                .foregroundColor(.secondary)
-                            Text("No build history")
-                                .font(.system(size: 11, weight: .medium))
-                                .foregroundColor(.secondary)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 40)
+                    if selectedProject != nil {
+                        detailContent
                     } else {
-                        ForEach(dataManager.buildHistory.prefix(12)) { buildStatus in
-                            BuildHistoryRow(
-                                buildNumber: buildStatus.projectName,
-                                status: buildStatus.status.displayName(for: buildStatus.projectType),
-                                timestamp: formatRelativeTime(buildStatus.createdAt),
-                                statusType: buildStatus.status,
-                                projectType: buildStatus.projectType,
-                                commitHash: buildStatus.commitHash,
-                                branch: buildStatus.branch
-                            )
-                        }
+                        listContent
                     }
                 }
                 .padding(.horizontal, 6)
@@ -124,6 +110,91 @@ struct BuildHistoryView: View {
         }
     }
 
+    // MARK: - List Content
+
+    @ViewBuilder
+    private var listContent: some View {
+        if dataManager.isLoading && dataManager.buildHistory.isEmpty {
+            VStack(spacing: 8) {
+                ProgressView()
+                    .scaleEffect(0.7)
+                Text("Loading...")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 40)
+        } else if let error = dataManager.error, dataManager.buildHistory.isEmpty {
+            VStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle")
+                    .font(.system(size: 20, weight: .light))
+                    .foregroundColor(.orange)
+                Text(error)
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 40)
+        } else if dataManager.buildHistory.isEmpty {
+            VStack(spacing: 6) {
+                Image(systemName: "tray")
+                    .font(.system(size: 20, weight: .light))
+                    .foregroundColor(.secondary)
+                Text("No build history")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 40)
+        } else {
+            ForEach(dataManager.buildHistory.prefix(14)) { buildStatus in
+                BuildHistoryRow(buildStatus: buildStatus)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        Task {
+                            loadingDetail = true
+                            selectedProject = buildStatus
+                            detailBuilds = await dataManager.fetchRecentBuilds(for: buildStatus)
+                            loadingDetail = false
+                        }
+                    }
+            }
+        }
+    }
+
+    // MARK: - Detail Content
+
+    @ViewBuilder
+    private var detailContent: some View {
+        if loadingDetail {
+            VStack(spacing: 8) {
+                ProgressView()
+                    .scaleEffect(0.7)
+                Text("Loading builds...")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 40)
+        } else if detailBuilds.isEmpty {
+            VStack(spacing: 6) {
+                Image(systemName: "tray")
+                    .font(.system(size: 20, weight: .light))
+                    .foregroundColor(.secondary)
+                Text("No builds found")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 40)
+        } else {
+            ForEach(detailBuilds) { build in
+                DetailBuildRow(build: build)
+            }
+        }
+    }
+
     private func formatRelativeTime(_ date: Date) -> String {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
@@ -131,48 +202,32 @@ struct BuildHistoryView: View {
     }
 }
 
-// MARK: - Build History Row
+// MARK: - Build History Row (summary)
 
 struct BuildHistoryRow: View {
-    let buildNumber: String
-    let status: String
-    let timestamp: String
-    let statusType: BuildStatus.BuildStatusType?
-    let projectType: BuildStatus.ProjectType?
-    let commitHash: String?
-    let branch: String?
+    let buildStatus: BuildStatus
 
     @State private var isHovered = false
-
-    init(buildNumber: String, status: String, timestamp: String, statusType: BuildStatus.BuildStatusType? = nil, projectType: BuildStatus.ProjectType? = nil, commitHash: String? = nil, branch: String? = nil) {
-        self.buildNumber = buildNumber
-        self.status = status
-        self.timestamp = timestamp
-        self.statusType = statusType
-        self.projectType = projectType
-        self.commitHash = commitHash
-        self.branch = branch
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text(buildNumber)
+                Text(buildStatus.projectName)
                     .font(.system(size: 13, weight: .semibold, design: .monospaced))
                     .lineLimit(1)
 
                 Spacer()
 
                 HStack(spacing: 5) {
-                    statusIcon
-                    Text(status)
+                    statusIcon(for: buildStatus.status)
+                    Text(buildStatus.status.displayName(for: buildStatus.projectType))
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundColor(statusColor)
+                        .foregroundColor(statusColor(for: buildStatus.status))
                 }
             }
 
             HStack(spacing: 8) {
-                if let branch = branch {
+                if let branch = buildStatus.branch {
                     HStack(spacing: 3) {
                         Image(systemName: branch.lowercased() == "wrangler" ? "terminal" : "arrow.branch")
                             .font(.system(size: 9, weight: .medium))
@@ -183,22 +238,106 @@ struct BuildHistoryRow: View {
                     .opacity(0.8)
                 }
 
-                if let commitHash = commitHash {
-                    HStack(spacing: 2) {
-                        Text(String(commitHash.prefix(7)))
-                            .font(.system(size: 10, weight: .regular, design: .monospaced))
-                            .foregroundColor(.secondary)
-                    }
+                if let commitHash = buildStatus.commitHash {
+                    Text(String(commitHash.prefix(7)))
+                        .font(.system(size: 10, weight: .regular, design: .monospaced))
+                        .foregroundColor(.secondary)
                 }
 
                 Spacer()
 
-                Text(timestamp)
+                Text(formatRelativeTime(buildStatus.createdAt))
                     .font(.system(size: 10, weight: .regular))
                     .foregroundColor(.secondary.opacity(0.7))
             }
         }
         .padding(.vertical, 8)
+        .padding(.horizontal, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(isHovered ? Color.primary.opacity(0.06) : Color.clear)
+        )
+        .help(buildStatus.commitMessage ?? "")
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
+    }
+
+    private func formatRelativeTime(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: Date())
+    }
+}
+
+// MARK: - Detail Build Row
+
+struct DetailBuildRow: View {
+    let build: BuildStatus
+
+    @State private var isHovered = false
+
+    private var commitLabel: String {
+        if let msg = build.commitMessage, !msg.starts(with: "Build ") {
+            return msg
+        }
+        return build.status.displayName(for: build.projectType)
+    }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            statusIcon(for: build.status)
+                .padding(.top, 1)
+
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text(commitLabel)
+                        .font(.system(size: 12, weight: .medium))
+                        .lineLimit(2)
+                        .foregroundColor(.primary)
+
+                    Spacer(minLength: 8)
+
+                    Text(formatRelativeTime(build.createdAt))
+                        .font(.system(size: 10))
+                        .foregroundColor(.secondary.opacity(0.7))
+                        .layoutPriority(1)
+                }
+
+                HStack(spacing: 8) {
+                    if let branch = build.branch {
+                        HStack(spacing: 3) {
+                            Image(systemName: branch.lowercased() == "wrangler" ? "terminal" : "arrow.branch")
+                                .font(.system(size: 9, weight: .medium))
+                            Text(branch)
+                                .font(.system(size: 10, weight: .medium))
+                        }
+                        .foregroundColor(branch.lowercased() == "wrangler" ? .orange : .purple)
+                        .opacity(0.8)
+                    }
+
+                    if let commitHash = build.commitHash {
+                        Text(String(commitHash.prefix(7)))
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundColor(.secondary)
+                    }
+
+                    Spacer()
+
+                    if let completedAt = build.completedAt {
+                        let duration = completedAt.timeIntervalSince(build.createdAt)
+                        if duration > 0 {
+                            Text(formatDuration(duration))
+                                .font(.system(size: 10))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 6)
         .padding(.horizontal, 10)
         .background(
             RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -211,42 +350,55 @@ struct BuildHistoryRow: View {
         }
     }
 
-    private var statusIcon: some View {
-        Group {
-            switch statusType {
-            case .success:
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(.green)
-            case .failure:
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundColor(.red)
-            case .inProgress:
-                Image(systemName: "progress.indicator")
-                    .foregroundColor(.blue)
-            case .canceled:
-                Image(systemName: "minus.circle.fill")
-                    .foregroundColor(.secondary)
-            case .queued:
-                Image(systemName: "clock.fill")
-                    .foregroundColor(.secondary)
-            default:
-                Image(systemName: "questionmark.circle")
-                    .foregroundColor(.secondary)
-            }
-        }
-        .font(.system(size: 12))
+    private func formatRelativeTime(_ date: Date) -> String {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter.localizedString(for: date, relativeTo: Date())
     }
 
-    private var statusColor: Color {
-        guard let statusType = statusType else { return .secondary }
+    private func formatDuration(_ seconds: TimeInterval) -> String {
+        let s = Int(seconds)
+        if s < 60 { return "\(s)s" }
+        return "\(s / 60)m \(s % 60)s"
+    }
+}
 
+// MARK: - Shared Helpers
+
+func statusIcon(for statusType: BuildStatus.BuildStatusType?) -> some View {
+    Group {
         switch statusType {
-        case .success: return .green
-        case .failure: return .red
-        case .inProgress: return .blue
-        case .canceled: return .secondary
-        case .queued: return .orange
+        case .success:
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundColor(.green)
+        case .failure:
+            Image(systemName: "xmark.circle.fill")
+                .foregroundColor(.red)
+        case .inProgress:
+            Image(systemName: "progress.indicator")
+                .foregroundColor(.blue)
+        case .canceled:
+            Image(systemName: "minus.circle.fill")
+                .foregroundColor(.secondary)
+        case .queued:
+            Image(systemName: "clock.fill")
+                .foregroundColor(.secondary)
+        default:
+            Image(systemName: "questionmark.circle")
+                .foregroundColor(.secondary)
         }
+    }
+    .font(.system(size: 12))
+}
+
+func statusColor(for statusType: BuildStatus.BuildStatusType?) -> Color {
+    guard let statusType = statusType else { return .secondary }
+    switch statusType {
+    case .success: return .green
+    case .failure: return .red
+    case .inProgress: return .blue
+    case .canceled: return .secondary
+    case .queued: return .orange
     }
 }
 

@@ -134,6 +134,7 @@ struct WorkerBuild: Codable {
     let created_on: String
     let stopped_on: String?
     let trigger: WorkerBuildTrigger?
+    let build_trigger_metadata: WorkerBuildTriggerMetadata?
 }
 
 struct WorkerBuildTrigger: Codable {
@@ -168,13 +169,16 @@ extension WorkerBuild {
 
         if outcome == "failure" || st == "failed" {
             buildStatus = .failure
+        } else if outcome == "success" {
+            buildStatus = .success
+        } else if outcome == "canceled" || st == "canceled" {
+            buildStatus = .canceled
         } else if st == "running" || st == "building" || st == "initializing" {
             buildStatus = .inProgress
         } else if st == "queued" || st == "pending" {
             buildStatus = .queued
-        } else if outcome == "success" {
-            buildStatus = .success
-        } else if outcome == "canceled" || st == "canceled" {
+        } else if st == "stopped" {
+            // Stopped without a recognized outcome — likely superseded by a newer build
             buildStatus = .canceled
         } else {
             buildStatus = .queued
@@ -183,8 +187,8 @@ extension WorkerBuild {
         let created = Self.parseDate(from: created_on) ?? Date()
         let completed = stopped_on.flatMap { Self.parseDate(from: $0) }
 
-        // Git metadata from trigger
-        let metadata = trigger?.build_trigger_metadata
+        // Git metadata — check top-level first, then nested in trigger
+        let metadata = build_trigger_metadata ?? trigger?.build_trigger_metadata
         let branch = metadata?.branch ?? trigger?.branch_includes?.first
         let commitHash = metadata?.commit_hash
         let commitMessage = metadata?.commit_message
