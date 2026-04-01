@@ -98,6 +98,8 @@ struct BuildHistoryView: View {
                     .padding(.horizontal, 6)
                     .padding(.vertical, 4)
                 }
+            } else if !hasApiKey {
+                listContent
             } else {
                 ScrollView {
                     LazyVStack(spacing: 2) {
