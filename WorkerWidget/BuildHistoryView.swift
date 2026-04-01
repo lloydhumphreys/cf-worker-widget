@@ -56,7 +56,7 @@ struct BuildHistoryView: View {
                     }) {
                         HStack(spacing: 4) {
                             Circle()
-                                .fill(autoRefreshEnabled ? Color("SuccessGreen") : Color.secondary.opacity(0.4))
+                                .fill(autoRefreshEnabled ? .green : Color.secondary.opacity(0.4))
                                 .frame(width: 6, height: 6)
                             Text(autoRefreshEnabled ? "Auto" : "Paused")
                                 .font(.system(size: 11, weight: .medium))
@@ -331,7 +331,7 @@ struct BuildHistoryRow: View {
                         Text(branch)
                             .font(.system(size: 10, weight: .medium))
                     }
-                    .foregroundColor(branch.lowercased() == "wrangler" ? Color("BranchOrange") : .purple)
+                    .foregroundColor(branch.lowercased() == "wrangler" ? .orange : .purple)
                     .opacity(0.8)
                 }
 
@@ -411,7 +411,7 @@ struct DetailBuildRow: View {
                             Text(branch)
                                 .font(.system(size: 10, weight: .medium))
                         }
-                        .foregroundColor(branch.lowercased() == "wrangler" ? Color("BranchOrange") : .purple)
+                        .foregroundColor(branch.lowercased() == "wrangler" ? .orange : .purple)
                         .opacity(0.8)
                     }
 
@@ -467,7 +467,7 @@ func statusIcon(for statusType: BuildStatus.BuildStatusType?) -> some View {
         switch statusType {
         case .success:
             Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(Color("SuccessGreen"))
+                .foregroundColor(.green)
         case .failure:
             Image(systemName: "xmark.circle.fill")
                 .foregroundColor(.red)
@@ -491,7 +491,7 @@ func statusIcon(for statusType: BuildStatus.BuildStatusType?) -> some View {
 func statusColor(for statusType: BuildStatus.BuildStatusType?) -> Color {
     guard let statusType = statusType else { return .secondary }
     switch statusType {
-    case .success: return Color("SuccessGreen")
+    case .success: return .green
     case .failure: return .red
     case .inProgress: return .blue
     case .canceled: return .secondary
