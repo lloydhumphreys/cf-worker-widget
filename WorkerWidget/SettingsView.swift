@@ -1,5 +1,6 @@
 import SwiftUI
 import ServiceManagement
+import Sparkle
 
 extension Notification.Name {
     static let apiKeyUpdated = Notification.Name("apiKeyUpdated")
@@ -183,7 +184,13 @@ struct ConnectionView: View {
                         }
                     }
             } footer: {
-                Text("Automatically start Worker Build History when you log in.")
+                Text("Automatically start WorkerWidget when you log in.")
+            }
+
+            Section {
+                CheckForUpdatesView()
+            } footer: {
+                Text("Check for new versions of WorkerWidget.")
             }
         }
         .padding()
@@ -302,6 +309,33 @@ struct WorkersView: View {
     }
 }
 
+// MARK: - Sparkle Update View
+
+struct CheckForUpdatesView: View {
+    @ObservedObject private var checkForUpdatesViewModel = CheckForUpdatesViewModel()
+
+    var body: some View {
+        Button("Check for Updates...") {
+            (NSApp.delegate as? AppDelegate)?.updaterController.checkForUpdates(nil)
+        }
+        .disabled(!checkForUpdatesViewModel.canCheckForUpdates)
+    }
+}
+
+final class CheckForUpdatesViewModel: ObservableObject {
+    @Published var canCheckForUpdates = false
+    private var observation: NSKeyValueObservation?
+
+    init() {
+        guard let updater = (NSApp.delegate as? AppDelegate)?.updaterController.updater else { return }
+        observation = updater.observe(\.canCheckForUpdates, options: [.initial, .new]) { [weak self] updater, _ in
+            DispatchQueue.main.async {
+                self?.canCheckForUpdates = updater.canCheckForUpdates
+            }
+        }
+    }
+}
+
 #Preview {
     SettingsView()
-} 
+}

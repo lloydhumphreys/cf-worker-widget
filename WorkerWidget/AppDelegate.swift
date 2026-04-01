@@ -1,9 +1,11 @@
 import Cocoa
+import Sparkle
 import SwiftUI
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusBarItem: NSStatusItem?
     var popover: NSPopover?
+    let updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NotificationManager.shared.requestNotificationPermission()
@@ -27,7 +29,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             button.action = #selector(statusBarButtonClicked(_:))
             button.target = self
 
-            if let image = NSImage(systemSymbolName: "cloud", accessibilityDescription: "Worker Build History") {
+            if let image = NSImage(systemSymbolName: "cloud", accessibilityDescription: "WorkerWidget") {
                 image.size = NSSize(width: 18, height: 18)
                 image.isTemplate = true
                 button.image = image

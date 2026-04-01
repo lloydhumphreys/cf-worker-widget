@@ -3,7 +3,7 @@ import Security
 
 class KeychainManager {
     static let shared = KeychainManager()
-    private let service = "com.workerbuildhistory"
+    private let service = "com.workerwidget"
     
     private init() {}
     

@@ -16,9 +16,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "6E69E6202DFDA34F00599B95"
-               BuildableName = "WorkerBuildHistory.app"
-               BlueprintName = "WorkerBuildHistory"
-               ReferencedContainer = "container:WorkerBuildHistory.xcodeproj">
+               BuildableName = "WorkerWidget.app"
+               BlueprintName = "WorkerWidget"
+               ReferencedContainer = "container:WorkerWidget.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -46,9 +46,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "6E69E6202DFDA34F00599B95"
-            BuildableName = "WorkerBuildHistory.app"
-            BlueprintName = "WorkerBuildHistory"
-            ReferencedContainer = "container:WorkerBuildHistory.xcodeproj">
+            BuildableName = "WorkerWidget.app"
+            BlueprintName = "WorkerWidget"
+            ReferencedContainer = "container:WorkerWidget.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -63,9 +63,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "6E69E6202DFDA34F00599B95"
-            BuildableName = "WorkerBuildHistory.app"
-            BlueprintName = "WorkerBuildHistory"
-            ReferencedContainer = "container:WorkerBuildHistory.xcodeproj">
+            BuildableName = "WorkerWidget.app"
+            BlueprintName = "WorkerWidget"
+            ReferencedContainer = "container:WorkerWidget.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

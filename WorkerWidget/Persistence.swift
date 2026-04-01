@@ -1,6 +1,6 @@
 //
 //  Persistence.swift
-//  WorkerBuildHistory
+//  WorkerWidget
 //
 //  Created by Lloyd Humphreys on 14/06/2025.
 //
@@ -32,7 +32,7 @@ struct PersistenceController {
     let container: NSPersistentContainer
 
     init(inMemory: Bool = false) {
-        container = NSPersistentContainer(name: "WorkerBuildHistory")
+        container = NSPersistentContainer(name: "WorkerWidget")
         if inMemory {
             container.persistentStoreDescriptions.first!.url = URL(fileURLWithPath: "/dev/null")
         }

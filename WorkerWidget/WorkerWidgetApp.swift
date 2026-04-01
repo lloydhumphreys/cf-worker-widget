@@ -1,6 +1,6 @@
 //
-//  WorkerBuildHistoryApp.swift
-//  WorkerBuildHistory
+//  WorkerWidgetApp.swift
+//  WorkerWidget
 //
 //  Created by Lloyd Humphreys on 14/06/2025.
 //
@@ -8,7 +8,7 @@
 import SwiftUI
 
 @main
-struct WorkerBuildHistoryApp: App {
+struct WorkerWidgetApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     let persistenceController = PersistenceController.shared
 

@@ -1,6 +1,6 @@
 //
 //  ContentView.swift
-//  WorkerBuildHistory
+//  WorkerWidget
 //
 //  Created by Lloyd Humphreys on 14/06/2025.
 //
