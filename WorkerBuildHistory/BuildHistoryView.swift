@@ -30,24 +30,25 @@ struct BuildHistoryView: View {
                     .foregroundColor(.secondary)
 
                     Spacer()
-
-                    Text(selectedProject?.projectName ?? "")
-                        .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                        .lineLimit(1)
                 } else {
-                    Button(action: {
-                        Task {
-                            await dataManager.refreshBuildHistory(force: true)
+                    ZStack {
+                        if dataManager.isLoading {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Button(action: {
+                                Task {
+                                    await dataManager.refreshBuildHistory(force: true)
+                                }
+                            }) {
+                                Image(systemName: "arrow.clockwise")
+                                    .font(.system(size: 13, weight: .medium))
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundColor(.secondary)
                         }
-                    }) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 13, weight: .medium))
-                            .rotationEffect(.degrees(dataManager.isLoading ? 360 : 0))
-                            .animation(dataManager.isLoading ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: dataManager.isLoading)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundColor(.secondary)
-                    .disabled(dataManager.isLoading)
+                    .frame(width: 16, height: 16)
 
                     Button(action: {
                         autoRefreshEnabled.toggle()
@@ -81,19 +82,30 @@ struct BuildHistoryView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
 
+            if selectedProject != nil {
+                BuildHistoryRow(buildStatus: detailBuilds.first ?? selectedProject!)
+                    .padding(.horizontal, 6)
+            }
+
             Divider().opacity(0.5)
 
             // Content
-            ScrollView {
-                LazyVStack(spacing: 2) {
-                    if selectedProject != nil {
+            if selectedProject != nil {
+                ScrollView {
+                    LazyVStack(spacing: 2) {
                         detailContent
-                    } else {
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
+                }
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 2) {
                         listContent
                     }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 4)
                 }
-                .padding(.horizontal, 6)
-                .padding(.vertical, 4)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -117,7 +129,7 @@ struct BuildHistoryView: View {
         if dataManager.isLoading && dataManager.buildHistory.isEmpty {
             VStack(spacing: 8) {
                 ProgressView()
-                    .scaleEffect(0.7)
+                    .controlSize(.small)
                 Text("Loading...")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.secondary)
@@ -152,11 +164,17 @@ struct BuildHistoryView: View {
                 BuildHistoryRow(buildStatus: buildStatus)
                     .contentShape(Rectangle())
                     .onTapGesture {
+                        let target = buildStatus
+                        selectedProject = target
+                        detailBuilds = []
+                        loadingDetail = true
                         Task {
-                            loadingDetail = true
-                            selectedProject = buildStatus
-                            detailBuilds = await dataManager.fetchRecentBuilds(for: buildStatus)
-                            loadingDetail = false
+                            let results = await dataManager.fetchRecentBuilds(for: target)
+                            // Only apply if the user hasn't navigated away
+                            if selectedProject?.id == target.id {
+                                detailBuilds = results
+                                loadingDetail = false
+                            }
                         }
                     }
             }
@@ -170,7 +188,7 @@ struct BuildHistoryView: View {
         if loadingDetail {
             VStack(spacing: 8) {
                 ProgressView()
-                    .scaleEffect(0.7)
+                    .controlSize(.small)
                 Text("Loading builds...")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.secondary)
@@ -191,6 +209,10 @@ struct BuildHistoryView: View {
         } else {
             ForEach(detailBuilds) { build in
                 DetailBuildRow(build: build)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        openBuildInBrowser(build)
+                    }
             }
         }
     }
@@ -199,6 +221,31 @@ struct BuildHistoryView: View {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
         return formatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    private func openBuildInBrowser(_ build: BuildStatus) {
+        guard let accountId = dataManager.workersViewModel.selectedAccountId else { return }
+
+        let urlString: String
+        if build.projectType == .worker {
+            if let buildId = build.deploymentId, build.branch != "wrangler" {
+                // Builds API item — link to specific build
+                urlString = "https://dash.cloudflare.com/\(accountId)/workers/services/view/\(build.projectName)/production/builds/\(buildId)"
+            } else {
+                // Deployment/wrangler item — link to worker overview
+                urlString = "https://dash.cloudflare.com/\(accountId)/workers/services/view/\(build.projectName)/production"
+            }
+        } else {
+            if let deploymentId = build.deploymentId {
+                urlString = "https://dash.cloudflare.com/\(accountId)/pages/view/\(build.projectName)/\(deploymentId)"
+            } else {
+                urlString = "https://dash.cloudflare.com/\(accountId)/pages/view/\(build.projectName)"
+            }
+        }
+
+        if let url = URL(string: urlString) {
+            NSWorkspace.shared.open(url)
+        }
     }
 }
 
@@ -210,7 +257,7 @@ struct BuildHistoryRow: View {
     @State private var isHovered = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 3) {
             HStack {
                 Text(buildStatus.projectName)
                     .font(.system(size: 13, weight: .semibold, design: .monospaced))
@@ -224,6 +271,13 @@ struct BuildHistoryRow: View {
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(statusColor(for: buildStatus.status))
                 }
+            }
+
+            if let message = buildStatus.commitMessage, !message.starts(with: "Build ") {
+                Text(message)
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
             }
 
             HStack(spacing: 8) {

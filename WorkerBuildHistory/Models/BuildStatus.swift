@@ -247,9 +247,9 @@ extension WorkerDeployment {
             completedAt: deploymentStatus == .success ? self.created_on : nil,
             environment: "production",
             deploymentId: self.id,
-            commitHash: String(primaryVersion?.version_id.prefix(8) ?? ""), // Short version ID
-            branch: self.source, // Use source as branch (wrangler, dashboard, etc.)
-            commitMessage: annotations["workers/triggered_by"] // Use trigger info
+            commitHash: String(primaryVersion?.version_id.prefix(8) ?? ""),
+            branch: self.source,
+            commitMessage: self.source == "wrangler" ? "Manually deployed" : (annotations["workers/triggered_by"] ?? "Deployed")
         )
     }
 }

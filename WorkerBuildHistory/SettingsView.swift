@@ -192,6 +192,7 @@ struct ConnectionView: View {
     private func saveApiKey() {
         do {
             try KeychainManager.shared.saveApiKey(apiKey)
+            CloudflareService.shared.clearCachedApiKey()
             errorMessage = nil
 
             // Trigger loading of accounts after successful save

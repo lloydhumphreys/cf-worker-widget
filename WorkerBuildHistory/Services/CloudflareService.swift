@@ -3,20 +3,38 @@ import Foundation
 class CloudflareService {
     static let shared = CloudflareService()
     private let baseURL = "https://api.cloudflare.com/client/v4"
-    
+    private var cachedApiKey: String?
+
+    private static let apiDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSZ"
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        return formatter
+    }()
+
+    private let session: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        config.urlCache = nil
+        return URLSession(configuration: config)
+    }()
+
     private func getApiKey() throws -> String {
-        do {
-            let apiKey = try KeychainManager.shared.getApiKey()
-            if let apiKey = apiKey, !apiKey.isEmpty {
-                return apiKey
-            } else {
-                throw CloudflareError.noApiKey
-            }
-        } catch {
-            throw error
+        if let cached = cachedApiKey {
+            return cached
         }
+        guard let apiKey = try KeychainManager.shared.getApiKey(), !apiKey.isEmpty else {
+            throw CloudflareError.noApiKey
+        }
+        cachedApiKey = apiKey
+        return apiKey
     }
-    
+
+    func clearCachedApiKey() {
+        cachedApiKey = nil
+    }
+
     private init() {}
     
     func fetchAccounts() async throws -> [CFAccount] {
@@ -26,7 +44,7 @@ class CloudflareService {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
             throw CloudflareError.invalidResponse
@@ -49,16 +67,11 @@ class CloudflareService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw CloudflareError.invalidResponse
         }
-        let decoder = JSONDecoder()
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSZ"
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        decoder.dateDecodingStrategy = .formatted(formatter)
+        let decoder = createJSONDecoder()
         let workersResponse = try decoder.decode(WorkersResponse.self, from: data)
         if !workersResponse.success {
             throw CloudflareError.apiError(workersResponse.errors)
@@ -77,13 +90,8 @@ class CloudflareService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let (data, _) = try await URLSession.shared.data(for: request)
-        let decoder = JSONDecoder()
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSZ"
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        decoder.dateDecodingStrategy = .formatted(formatter)
+        let (data, _) = try await session.data(for: request)
+        let decoder = createJSONDecoder()
         let projectsResponse = try decoder.decode(PagesProjectsResponse.self, from: data)
         if !projectsResponse.success {
             throw CloudflareError.apiError(projectsResponse.errors)
@@ -98,7 +106,7 @@ class CloudflareService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw CloudflareError.invalidResponse
         }
@@ -184,7 +192,7 @@ class CloudflareService {
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw CloudflareError.invalidResponse
         }
@@ -342,7 +350,7 @@ class CloudflareService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw CloudflareError.invalidResponse
@@ -364,11 +372,9 @@ class CloudflareService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-
             throw CloudflareError.invalidResponse
         }
         
@@ -398,7 +404,7 @@ class CloudflareService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             throw CloudflareError.invalidResponse
         }
@@ -466,11 +472,7 @@ class CloudflareService {
     
     private func createJSONDecoder() -> JSONDecoder {
         let decoder = JSONDecoder()
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSZ"
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        decoder.dateDecodingStrategy = .formatted(formatter)
+        decoder.dateDecodingStrategy = .formatted(Self.apiDateFormatter)
         return decoder
     }
 }

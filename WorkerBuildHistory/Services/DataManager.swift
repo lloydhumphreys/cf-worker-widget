@@ -232,17 +232,15 @@ class DataManager: ObservableObject {
         guard let accountId = workersViewModel.selectedAccountId else { return [] }
 
         if project.projectType == .worker {
-            // Find worker tag
+            // Try Builds API first
             if let worker = workersViewModel.workers.first(where: { $0.id == project.projectName }),
                let tag = worker.tag {
-                do {
-                    let builds = try await CloudflareService.shared.fetchWorkerBuilds(accountId: accountId, workerTag: tag, limit: 10)
+                if let builds = try? await CloudflareService.shared.fetchWorkerBuilds(accountId: accountId, workerTag: tag, limit: 10),
+                   !builds.isEmpty {
                     return builds.map { $0.toBuildStatus(workerName: project.projectName) }
-                } catch {
-                    return []
                 }
             }
-            // Fallback to deployments
+            // Fall back to deployments API
             do {
                 let deployments = try await CloudflareService.shared.fetchWorkerDeployments(accountId: accountId, scriptName: project.projectName, limit: 10)
                 return deployments.map { $0.toBuildStatus(workerName: project.projectName) }
