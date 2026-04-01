@@ -4,129 +4,118 @@ struct BuildHistoryView: View {
     @State private var showingSettings = false
     @State private var autoRefreshEnabled = true
     @StateObject private var dataManager = DataManager.shared
-    
+
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color(NSColor.controlBackgroundColor))
-                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
-            
-            VStack(spacing: 8) {
-                HStack {
-                    Button(action: { 
-                        Task {
-                            await dataManager.refreshBuildHistory(force: true)
-                        }
-                    }) {
-                        Image(systemName: "arrow.clockwise")
-                            .font(.system(size: 14))
+        VStack(spacing: 0) {
+            // Toolbar
+            HStack(spacing: 12) {
+                Button(action: {
+                    Task {
+                        await dataManager.refreshBuildHistory(force: true)
                     }
-                    .buttonStyle(.plain)
-                    .disabled(dataManager.isLoading)
-                    .padding(8)
-                    
-                    Button(action: {
-                        autoRefreshEnabled.toggle()
-                        dataManager.setAutoRefresh(enabled: autoRefreshEnabled)
-                    }) {
-                        HStack(spacing: 4) {
-                            Image(systemName: autoRefreshEnabled ? "clock.arrow.trianglehead.2.counterclockwise.rotate.90" : "pause.fill")
-                                .font(.system(size: 14))
-                            Text(autoRefreshEnabled ? "Auto refresh on" : "Auto refresh off")
-                                .font(.system(size: 12))
-                        }
-                        .foregroundColor(autoRefreshEnabled ? .blue : .secondary)
-                    }
-                    .buttonStyle(.plain)
-                    
-                    Spacer()
-                    
-                    Button(action: { 
-                        if !showingSettings {
-                            openSettings()
-                        }
-                    }) {
-                        Image(systemName: "gearshape")
-                            .font(.system(size: 14))
-                    }
-                    .buttonStyle(.plain)
-                    .padding(8)
+                }) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 13, weight: .medium))
+                        .rotationEffect(.degrees(dataManager.isLoading ? 360 : 0))
+                        .animation(dataManager.isLoading ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: dataManager.isLoading)
                 }
-                .background(Color(NSColor.controlBackgroundColor))
-                
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        if dataManager.isLoading {
-                            HStack {
-                                ProgressView()
-                                    .scaleEffect(0.8)
-                                Text("Loading build history...")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            .padding()
-                            .frame(maxWidth: .infinity, alignment: .center)
-                        } else if let error = dataManager.error {
-                            VStack {
-                                Image(systemName: "exclamationmark.triangle")
-                                    .foregroundColor(.orange)
-                                Text("Error: \(error)")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .multilineTextAlignment(.center)
-                            }
-                            .padding()
-                        } else if dataManager.buildHistory.isEmpty {
-                            VStack {
-                                Image(systemName: "tray")
-                                    .foregroundColor(.secondary)
-                                Text("No build history found")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                Text("Configure workers and pages in settings")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
-                            .padding()
-                            .frame(maxWidth: .infinity, alignment: .center)
-                        } else {
-                            ForEach(Array(dataManager.buildHistory.prefix(10).enumerated()), id: \.element.id) { index, buildStatus in
-                                VStack(spacing: 0) {
-                                    BuildHistoryRow(
-                                        buildNumber: buildStatus.projectName,
-                                        status: buildStatus.status.displayName(for: buildStatus.projectType),
-                                        timestamp: formatRelativeTime(buildStatus.createdAt),
-                                        statusType: buildStatus.status,
-                                        projectType: buildStatus.projectType,
-                                        commitHash: buildStatus.commitHash,
-                                        branch: buildStatus.branch
-                                    )
-                                    
-                                    if index < dataManager.buildHistory.prefix(10).count - 1 {
-                                        Divider()
-                                            .padding(.leading, 12)
-                                    }
-                                }
-                            }
-                        }
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary)
+                .disabled(dataManager.isLoading)
+
+                Button(action: {
+                    autoRefreshEnabled.toggle()
+                    dataManager.setAutoRefresh(enabled: autoRefreshEnabled)
+                }) {
+                    HStack(spacing: 4) {
+                        Circle()
+                            .fill(autoRefreshEnabled ? Color.green : Color.secondary.opacity(0.4))
+                            .frame(width: 6, height: 6)
+                        Text(autoRefreshEnabled ? "Auto" : "Paused")
+                            .font(.system(size: 11, weight: .medium))
                     }
+                    .foregroundColor(.secondary)
                 }
-                .background(Color.white)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                Button(action: {
+                    if !showingSettings {
+                        showingSettings = true
+                    }
+                }) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 13, weight: .medium))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary)
             }
-            .padding(4)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+
+            Divider().opacity(0.5)
+
+            // Content
+            ScrollView {
+                LazyVStack(spacing: 2) {
+                    if dataManager.isLoading && dataManager.buildHistory.isEmpty {
+                        VStack(spacing: 8) {
+                            ProgressView()
+                                .scaleEffect(0.7)
+                            Text("Loading...")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 40)
+                    } else if let error = dataManager.error, dataManager.buildHistory.isEmpty {
+                        VStack(spacing: 6) {
+                            Image(systemName: "exclamationmark.triangle")
+                                .font(.system(size: 20, weight: .light))
+                                .foregroundColor(.orange)
+                            Text(error)
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.center)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 40)
+                    } else if dataManager.buildHistory.isEmpty {
+                        VStack(spacing: 6) {
+                            Image(systemName: "tray")
+                                .font(.system(size: 20, weight: .light))
+                                .foregroundColor(.secondary)
+                            Text("No build history")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundColor(.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 40)
+                    } else {
+                        ForEach(dataManager.buildHistory.prefix(12)) { buildStatus in
+                            BuildHistoryRow(
+                                buildNumber: buildStatus.projectName,
+                                status: buildStatus.status.displayName(for: buildStatus.projectType),
+                                timestamp: formatRelativeTime(buildStatus.createdAt),
+                                statusType: buildStatus.status,
+                                projectType: buildStatus.projectType,
+                                commitHash: buildStatus.commitHash,
+                                branch: buildStatus.branch
+                            )
+                        }
+                    }
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+            }
         }
-        .frame(minWidth: 400, minHeight: 300)
-        .mask(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.black)
-        )
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .sheet(isPresented: $showingSettings) {
             SettingsView()
                 .frame(width: 550, height: 450)
         }
         .onAppear {
-            // Show cached data immediately if available, fresh data loads in background
             if dataManager.buildHistory.isEmpty {
                 Task {
                     await dataManager.smartRefresh()
@@ -134,17 +123,15 @@ struct BuildHistoryView: View {
             }
         }
     }
-    
-    private func openSettings() {
-        showingSettings = true
-    }
-    
+
     private func formatRelativeTime(_ date: Date) -> String {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
         return formatter.localizedString(for: date, relativeTo: Date())
     }
 }
+
+// MARK: - Build History Row
 
 struct BuildHistoryRow: View {
     let buildNumber: String
@@ -154,7 +141,9 @@ struct BuildHistoryRow: View {
     let projectType: BuildStatus.ProjectType?
     let commitHash: String?
     let branch: String?
-    
+
+    @State private var isHovered = false
+
     init(buildNumber: String, status: String, timestamp: String, statusType: BuildStatus.BuildStatusType? = nil, projectType: BuildStatus.ProjectType? = nil, commitHash: String? = nil, branch: String? = nil) {
         self.buildNumber = buildNumber
         self.status = status
@@ -164,109 +153,104 @@ struct BuildHistoryRow: View {
         self.commitHash = commitHash
         self.branch = branch
     }
-    
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Text(buildNumber)
-                    .font(.headline)
-                    .fontDesign(.monospaced)
+                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
                     .lineLimit(1)
-                
+
                 Spacer()
-                
-                HStack(spacing: 4) {
-                    // Status indicator with appropriate icon
+
+                HStack(spacing: 5) {
                     statusIcon
-                    
                     Text(status)
-                        .font(.subheadline)
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundColor(statusColor)
                 }
             }
-            
-            // Commit and branch info
+
             HStack(spacing: 8) {
                 if let branch = branch {
-                    HStack(spacing: 2) {
-                        Image(systemName: branch.lowercased() == "wrangler" ? "chevron.forward" : "arrow.branch")
-                            .font(.caption2)
-                            .foregroundColor(branch.lowercased() == "wrangler" ? Color.orange : Color.purple)
+                    HStack(spacing: 3) {
+                        Image(systemName: branch.lowercased() == "wrangler" ? "terminal" : "arrow.branch")
+                            .font(.system(size: 9, weight: .medium))
                         Text(branch)
-                            .font(.caption)
-                            .foregroundColor(branch.lowercased() == "wrangler" ? Color.orange : Color.purple)
+                            .font(.system(size: 10, weight: .medium))
                     }
+                    .foregroundColor(branch.lowercased() == "wrangler" ? .orange : .purple)
+                    .opacity(0.8)
                 }
-                
+
                 if let commitHash = commitHash {
                     HStack(spacing: 2) {
-                        Image(systemName: "number")
-                            .font(.caption2)
+                        Text(String(commitHash.prefix(7)))
+                            .font(.system(size: 10, weight: .regular, design: .monospaced))
                             .foregroundColor(.secondary)
-                        Text(String(commitHash.prefix(8))) // Show first 8 characters
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .fontDesign(.monospaced)
                     }
                 }
-                
+
                 Spacer()
-                
+
                 Text(timestamp)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .font(.system(size: 10, weight: .regular))
+                    .foregroundColor(.secondary.opacity(0.7))
             }
         }
         .padding(.vertical, 8)
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(isHovered ? Color.primary.opacity(0.06) : Color.clear)
+        )
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.15)) {
+                isHovered = hovering
+            }
+        }
     }
-    
+
     private var statusIcon: some View {
         Group {
             switch statusType {
             case .success:
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundColor(Color(red: 0.0, green: 0.6, blue: 0.0))
+                    .foregroundColor(.green)
             case .failure:
-                Image(systemName: "exclamationmark.triangle.fill")
+                Image(systemName: "xmark.circle.fill")
                     .foregroundColor(.red)
             case .inProgress:
-                Image(systemName: "clock")
+                Image(systemName: "progress.indicator")
                     .foregroundColor(.blue)
             case .canceled:
-                Image(systemName: "xmark")
-                    .foregroundColor(.orange)
+                Image(systemName: "minus.circle.fill")
+                    .foregroundColor(.secondary)
             case .queued:
-                Image(systemName: "clock.badge")
-                    .foregroundColor(.gray)
+                Image(systemName: "clock.fill")
+                    .foregroundColor(.secondary)
             default:
-                Image(systemName: "questionmark")
-                    .foregroundColor(.gray)
+                Image(systemName: "questionmark.circle")
+                    .foregroundColor(.secondary)
             }
         }
-        .font(.caption)
+        .font(.system(size: 12))
     }
-    
+
     private var statusColor: Color {
-        guard let statusType = statusType else { return Color.green.opacity(0.8) }
-        
+        guard let statusType = statusType else { return .secondary }
+
         switch statusType {
-        case .success:
-            return Color(red: 0.0, green: 0.6, blue: 0.0) // Dark green
-        case .failure:
-            return .red
-        case .inProgress:
-            return .orange
-        case .canceled:
-            return .gray
-        case .queued:
-            return .orange
+        case .success: return .green
+        case .failure: return .red
+        case .inProgress: return .blue
+        case .canceled: return .secondary
+        case .queued: return .orange
         }
     }
 }
 
 #Preview {
     BuildHistoryView()
-        .frame(width: 600, height: 500)
-        .padding()
-} 
+        .frame(width: 400, height: 500)
+}
