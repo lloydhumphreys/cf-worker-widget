@@ -137,11 +137,17 @@ struct BuildHistoryView: View {
                     .foregroundColor(.secondary)
                 Text("Connect your Cloudflare account")
                     .font(.system(size: 13, weight: .medium))
-                Text("Create an API token with Workers and Pages read access, then paste it here.")
+                Text("Create a custom API token with these permissions:")
                     .font(.system(size: 11))
                     .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 20)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Label("Workers Scripts — Read", systemImage: "checkmark.circle.fill")
+                    Label("Workers Builds Configuration — Read", systemImage: "checkmark.circle.fill")
+                    Label("Cloudflare Pages — Read", systemImage: "checkmark.circle.fill")
+                }
+                .font(.system(size: 11, weight: .medium))
+                .foregroundColor(.secondary)
 
                 HStack(spacing: 8) {
                     Button("Create Token") {
