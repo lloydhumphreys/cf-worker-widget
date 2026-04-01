@@ -124,9 +124,44 @@ struct BuildHistoryView: View {
 
     // MARK: - List Content
 
+    private var hasApiKey: Bool {
+        (try? KeychainManager.shared.getApiKey()) != nil
+    }
+
     @ViewBuilder
     private var listContent: some View {
-        if dataManager.isLoading && dataManager.buildHistory.isEmpty {
+        if !hasApiKey {
+            VStack(spacing: 12) {
+                Image(systemName: "cloud")
+                    .font(.system(size: 28, weight: .light))
+                    .foregroundColor(.secondary)
+                Text("Connect your Cloudflare account")
+                    .font(.system(size: 13, weight: .medium))
+                Text("Create an API token with Workers and Pages read access, then paste it here.")
+                    .font(.system(size: 11))
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 20)
+
+                HStack(spacing: 8) {
+                    Button("Create Token") {
+                        if let url = URL(string: "https://dash.cloudflare.com/profile/api-tokens") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+
+                    Button("Add API Key") {
+                        showingSettings = true
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 30)
+        } else if dataManager.isLoading && dataManager.buildHistory.isEmpty {
             VStack(spacing: 8) {
                 ProgressView()
                     .controlSize(.small)
