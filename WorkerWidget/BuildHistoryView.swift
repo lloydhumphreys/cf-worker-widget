@@ -165,8 +165,7 @@ struct BuildHistoryView: View {
                     .controlSize(.small)
                 }
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 30)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if dataManager.isLoading && dataManager.buildHistory.isEmpty {
             VStack(spacing: 8) {
                 ProgressView()
