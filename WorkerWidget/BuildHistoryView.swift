@@ -111,6 +111,7 @@ struct BuildHistoryView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.background.opacity(0.6))
         .sheet(isPresented: $showingSettings) {
             SettingsView()
                 .frame(width: 550, height: 450)
@@ -330,7 +331,7 @@ struct BuildHistoryRow: View {
                         Text(branch)
                             .font(.system(size: 10, weight: .medium))
                     }
-                    .foregroundColor(branch.lowercased() == "wrangler" ? .orange : .purple)
+                    .foregroundColor(branch.lowercased() == "wrangler" ? Color("BranchOrange") : .purple)
                     .opacity(0.8)
                 }
 
@@ -410,7 +411,7 @@ struct DetailBuildRow: View {
                             Text(branch)
                                 .font(.system(size: 10, weight: .medium))
                         }
-                        .foregroundColor(branch.lowercased() == "wrangler" ? .orange : .purple)
+                        .foregroundColor(branch.lowercased() == "wrangler" ? Color("BranchOrange") : .purple)
                         .opacity(0.8)
                     }
 
