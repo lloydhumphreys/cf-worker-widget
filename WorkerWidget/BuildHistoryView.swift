@@ -56,7 +56,7 @@ struct BuildHistoryView: View {
                     }) {
                         HStack(spacing: 4) {
                             Circle()
-                                .fill(autoRefreshEnabled ? Color(red: 0.15, green: 0.55, blue: 0.15) : Color.secondary.opacity(0.4))
+                                .fill(autoRefreshEnabled ? Color("SuccessGreen") : Color.secondary.opacity(0.4))
                                 .frame(width: 6, height: 6)
                             Text(autoRefreshEnabled ? "Auto" : "Paused")
                                 .font(.system(size: 11, weight: .medium))
@@ -466,7 +466,7 @@ func statusIcon(for statusType: BuildStatus.BuildStatusType?) -> some View {
         switch statusType {
         case .success:
             Image(systemName: "checkmark.circle.fill")
-                .foregroundColor(Color(red: 0.15, green: 0.55, blue: 0.15))
+                .foregroundColor(Color("SuccessGreen"))
         case .failure:
             Image(systemName: "xmark.circle.fill")
                 .foregroundColor(.red)
@@ -490,7 +490,7 @@ func statusIcon(for statusType: BuildStatus.BuildStatusType?) -> some View {
 func statusColor(for statusType: BuildStatus.BuildStatusType?) -> Color {
     guard let statusType = statusType else { return .secondary }
     switch statusType {
-    case .success: return Color(red: 0.15, green: 0.55, blue: 0.15)
+    case .success: return Color("SuccessGreen")
     case .failure: return .red
     case .inProgress: return .blue
     case .canceled: return .secondary
