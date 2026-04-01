@@ -35,42 +35,26 @@ class WorkersViewModel: ObservableObject {
     }
     
     func loadAccounts() async {
-        guard isActive else { 
-            print("❌ WorkersViewModel: Not active, skipping account load")
-            return 
-        }
-        
-        print("🔄 WorkersViewModel: Starting account load...")
+        guard isActive else { return }
         isLoading = true
         error = nil
-        
+
         do {
-            print("🔑 WorkersViewModel: Fetching accounts from API...")
             accounts = try await CloudflareService.shared.fetchAccounts()
-            print("✅ WorkersViewModel: Fetched \(accounts.count) accounts")
-            
-            guard isActive else { 
-                print("❌ WorkersViewModel: No longer active after account fetch")
-                return 
-            }
-            
+            guard isActive else { return }
+
             if let first = accounts.first {
                 selectedAccountId = first.id
-                print("✅ WorkersViewModel: Selected account: \(first.name) (\(first.id))")
                 await loadWorkers(for: first.id)
                 await loadPagesProjects(for: first.id)
-            } else {
-                print("❌ WorkersViewModel: No accounts found")
             }
         } catch {
             guard isActive else { return }
-            print("❌ WorkersViewModel: Account load error: \(error)")
             self.error = error.localizedDescription
         }
-        
+
         guard isActive else { return }
         isLoading = false
-        print("✅ WorkersViewModel: Account load complete")
     }
     
     func loadWorkers(for accountId: String) async {
@@ -80,7 +64,7 @@ class WorkersViewModel: ObservableObject {
         do {
             workers = try await CloudflareService.shared.fetchWorkers(accountId: accountId)
             // Notify data manager that workers were loaded
-            await DataManager.shared.onWorkersLoaded()
+            DataManager.shared.onWorkersLoaded()
         } catch {
             guard isActive else { return }
             self.error = error.localizedDescription
@@ -96,7 +80,7 @@ class WorkersViewModel: ObservableObject {
         do {
             pagesProjects = try await CloudflareService.shared.fetchPagesProjects(accountId: accountId)
             // Notify data manager that pages were loaded
-            await DataManager.shared.onWorkersLoaded()
+            DataManager.shared.onWorkersLoaded()
         } catch {
             guard isActive else { return }
             self.error = error.localizedDescription
@@ -109,7 +93,7 @@ class WorkersViewModel: ObservableObject {
         if let index = workers.firstIndex(where: { $0.id == worker.id }) {
             workers[index].isVisible.toggle()
             Task {
-                await DataManager.shared.onVisibilityChanged()
+                DataManager.shared.onVisibilityChanged()
             }
         }
     }
@@ -119,7 +103,7 @@ class WorkersViewModel: ObservableObject {
             workers[i].isVisible = true
         }
         Task {
-            await DataManager.shared.onVisibilityChanged()
+            DataManager.shared.onVisibilityChanged()
         }
     }
     
@@ -128,7 +112,7 @@ class WorkersViewModel: ObservableObject {
             workers[i].isVisible = false
         }
         Task {
-            await DataManager.shared.onVisibilityChanged()
+            DataManager.shared.onVisibilityChanged()
         }
     }
     

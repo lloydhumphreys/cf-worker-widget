@@ -1,4 +1,5 @@
 import SwiftUI
+import ServiceManagement
 
 extension Notification.Name {
     static let apiKeyUpdated = Notification.Name("apiKeyUpdated")
@@ -12,9 +13,9 @@ struct SettingsView: View {
     
     var body: some View {
         TabView {
-            ApiKeysView(apiKey: $apiKey, errorMessage: $errorMessage)
+            ConnectionView(apiKey: $apiKey, errorMessage: $errorMessage)
                 .tabItem {
-                    Label("API Keys", systemImage: "key.fill")
+                    Label("Cloudflare Connection", systemImage: "cloud")
                 }
             
             WorkersView(viewModel: workersViewModel)
@@ -117,10 +118,12 @@ struct SettingsView: View {
     }
 }
 
-struct ApiKeysView: View {
+struct ConnectionView: View {
     @Binding var apiKey: String
     @Binding var errorMessage: String?
-    
+    @State private var refreshMinutes: Int = DataManager.shared.refreshIntervalMinutes
+    @State private var launchAtLogin: Bool = SMAppService.mainApp.status == .enabled
+
     var body: some View {
         Form {
             Section {
@@ -130,13 +133,13 @@ struct ApiKeysView: View {
                         .onSubmit {
                             saveApiKey()
                         }
-                    
+
                     Button("Save") {
                         saveApiKey()
                     }
                     .disabled(apiKey.isEmpty)
                 }
-                
+
                 if let error = errorMessage {
                     Text(error)
                         .foregroundColor(.red)
@@ -147,15 +150,50 @@ struct ApiKeysView: View {
             } footer: {
                 Text("Your API key will be stored securely in the keychain.")
             }
+
+            Section {
+                Picker("Refresh Interval", selection: $refreshMinutes) {
+                    Text("1 minute").tag(1)
+                    Text("2 minutes").tag(2)
+                    Text("5 minutes").tag(5)
+                    Text("10 minutes").tag(10)
+                    Text("15 minutes").tag(15)
+                    Text("30 minutes").tag(30)
+                }
+                .onChange(of: refreshMinutes) { _, newValue in
+                    DataManager.shared.refreshIntervalMinutes = newValue
+                }
+            } header: {
+                Text("Auto Refresh")
+            } footer: {
+                Text("How often build history refreshes automatically. The refresh button always fetches immediately.")
+            }
+
+            Section {
+                Toggle("Start at Login", isOn: $launchAtLogin)
+                    .onChange(of: launchAtLogin) { _, newValue in
+                        do {
+                            if newValue {
+                                try SMAppService.mainApp.register()
+                            } else {
+                                try SMAppService.mainApp.unregister()
+                            }
+                        } catch {
+                            launchAtLogin = !newValue
+                        }
+                    }
+            } footer: {
+                Text("Automatically start Worker Build History when you log in.")
+            }
         }
         .padding()
     }
-    
+
     private func saveApiKey() {
         do {
             try KeychainManager.shared.saveApiKey(apiKey)
             errorMessage = nil
-            
+
             // Trigger loading of accounts after successful save
             NotificationCenter.default.post(name: .apiKeyUpdated, object: nil)
         } catch {
@@ -177,7 +215,7 @@ struct WorkersView: View {
                     }
                 }
                 .pickerStyle(PopUpButtonPickerStyle())
-                .onChange(of: viewModel.selectedAccountId) { id in
+                .onChange(of: viewModel.selectedAccountId) { _, id in
                     guard viewModel.isActive, let id = id else { return }
                     Task {
                         await viewModel.loadWorkers(for: id)

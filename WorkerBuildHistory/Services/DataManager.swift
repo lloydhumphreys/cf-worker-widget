@@ -13,12 +13,31 @@ class DataManager: ObservableObject {
     
     private let visibilityKey = "workerVisibilitySettings"
     private let pagesVisibilityKey = "pagesVisibilitySettings"
+    private static let refreshIntervalKey = "refreshIntervalMinutes"
+    private static let defaultRefreshMinutes = 5
+
     private var refreshTimer: Timer?
     private var lastRefreshTime: Date = Date.distantPast
-    private let minimumRefreshInterval: TimeInterval = 300 // 1 minute minimum between refreshes
     private var autoRefreshEnabled: Bool = true
-    private let autoRefreshInterval: TimeInterval = 60 // 30 seconds for auto-refresh
     private static var hasExploredAPIs = false
+
+    var refreshIntervalMinutes: Int {
+        get {
+            let stored = UserDefaults.standard.integer(forKey: Self.refreshIntervalKey)
+            return stored > 0 ? stored : Self.defaultRefreshMinutes
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: Self.refreshIntervalKey)
+            // Restart timer with new interval
+            if autoRefreshEnabled {
+                startPeriodicRefresh()
+            }
+        }
+    }
+
+    private var refreshInterval: TimeInterval {
+        TimeInterval(refreshIntervalMinutes * 60)
+    }
     
     private init() {
         // Load saved visibility settings on initialization
@@ -67,7 +86,7 @@ class DataManager: ObservableObject {
         
         // Rate limiting: don't refresh more than once per minute unless forced
         let timeSinceLastRefresh = Date().timeIntervalSince(lastRefreshTime)
-        if !force && timeSinceLastRefresh < minimumRefreshInterval {
+        if !force && timeSinceLastRefresh < refreshInterval {
             return
         }
         
@@ -75,74 +94,70 @@ class DataManager: ObservableObject {
         isLoading = true
         error = nil
         
-        do {
-            // First load accounts to get the selected account ID
-            await workersViewModel.loadAccounts()
-            
-            guard let accountId = workersViewModel.selectedAccountId else {
-                buildHistory = []
-                isLoading = false
-                return
-            }
-            
-            // Load workers and pages
-            await workersViewModel.loadWorkers(for: accountId)
-            await workersViewModel.loadPagesProjects(for: accountId)
-            
-            // Apply saved visibility settings
-            applyVisibilitySettings()
-            
-            let visibleWorkers = workersViewModel.workers.filter { $0.isVisible }
-            let visiblePages = workersViewModel.pagesProjects.filter { $0.isVisible }
-            
-            // Now load build history for visible items progressively
-            var progressiveBuildHistory: [BuildStatus] = []
-            
-            // Create tasks for all workers and pages
-            await withTaskGroup(of: [BuildStatus].self) { group in
-                // Add worker tasks
-                for worker in visibleWorkers {
-                    group.addTask {
-                        do {
-                            return try await CloudflareService.shared.fetchBuildHistoryForWorkers([worker], accountId: accountId)
-                        } catch {
-                            return []
-                        }
-                    }
-                }
-                
-                // Add pages tasks
-                for page in visiblePages {
-                    group.addTask {
-                        do {
-                            return try await CloudflareService.shared.fetchBuildHistoryForPages([page], accountId: accountId)
-                        } catch {
-                            return []
-                        }
-                    }
-                }
-                
-                // Process results as they complete
-                for await result in group {
-                    if !result.isEmpty {
-                        progressiveBuildHistory.append(contentsOf: result)
-                        // Update UI immediately with new results
-                        buildHistory = progressiveBuildHistory.sorted { $0.createdAt > $1.createdAt }
-                    }
-                }
-            }
-            
-            let newBuildHistory = progressiveBuildHistory
-            
-            // Check for build status changes and send notifications
-            NotificationManager.shared.checkForBuildStatusChanges(newBuildHistory)
-            
-            // Update build history and cache it
-            buildHistory = newBuildHistory
-            CacheManager.shared.cacheBuildHistory(newBuildHistory)
-        } catch {
-            self.error = error.localizedDescription
+        // First load accounts to get the selected account ID
+        await workersViewModel.loadAccounts()
+
+        guard let accountId = workersViewModel.selectedAccountId else {
+            buildHistory = []
+            isLoading = false
+            return
         }
+
+        // Load workers and pages
+        await workersViewModel.loadWorkers(for: accountId)
+        await workersViewModel.loadPagesProjects(for: accountId)
+
+        // Apply saved visibility settings
+        applyVisibilitySettings()
+
+        let visibleWorkers = workersViewModel.workers.filter { $0.isVisible }
+        let visiblePages = workersViewModel.pagesProjects.filter { $0.isVisible }
+
+        // Now load build history for visible items progressively
+        var progressiveBuildHistory: [BuildStatus] = []
+
+        // Create tasks for all workers and pages
+        await withTaskGroup(of: [BuildStatus].self) { group in
+            // Add worker tasks
+            for worker in visibleWorkers {
+                group.addTask {
+                    do {
+                        return try await CloudflareService.shared.fetchBuildHistoryForWorkers([worker], accountId: accountId)
+                    } catch {
+                        return []
+                    }
+                }
+            }
+
+            // Add pages tasks
+            for page in visiblePages {
+                group.addTask {
+                    do {
+                        return try await CloudflareService.shared.fetchBuildHistoryForPages([page], accountId: accountId)
+                    } catch {
+                        return []
+                    }
+                }
+            }
+
+            // Process results as they complete
+            for await result in group {
+                if !result.isEmpty {
+                    progressiveBuildHistory.append(contentsOf: result)
+                    // Update UI immediately with new results
+                    buildHistory = progressiveBuildHistory.sorted { $0.createdAt > $1.createdAt }
+                }
+            }
+        }
+
+        let newBuildHistory = progressiveBuildHistory.sorted { $0.createdAt > $1.createdAt }
+
+        // Check for build status changes and send notifications
+        NotificationManager.shared.checkForBuildStatusChanges(newBuildHistory)
+
+        // Update build history and cache it
+        buildHistory = newBuildHistory
+        CacheManager.shared.cacheBuildHistory(newBuildHistory)
         
         isLoading = false
     }
@@ -180,7 +195,7 @@ class DataManager: ObservableObject {
         refreshTimer?.invalidate()
         
         // Auto-refresh every 30 seconds when enabled
-        refreshTimer = Timer.scheduledTimer(withTimeInterval: autoRefreshInterval, repeats: true) { [weak self] _ in
+        refreshTimer = Timer.scheduledTimer(withTimeInterval: refreshInterval, repeats: true) { [weak self] _ in
             Task { [weak self] in
                 await self?.smartRefresh()
             }
@@ -216,12 +231,10 @@ class DataManager: ObservableObject {
     func onWorkersLoaded() {
         applyVisibilitySettings()
         // Don't auto-refresh on worker load to prevent rate limiting
-        print("📝 DataManager: Workers loaded, visibility settings applied")
     }
     
     func onVisibilityChanged() {
         saveVisibilitySettings()
         // Don't auto-refresh on every visibility change to prevent rate limiting
-        print("👁️ DataManager: Visibility settings saved")
     }
 }

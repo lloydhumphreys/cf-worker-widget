@@ -77,7 +77,7 @@ class CloudflareService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, _) = try await URLSession.shared.data(for: request)
         let decoder = JSONDecoder()
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd'T'HH:mm:ss.SSSSSSZ"
@@ -143,7 +143,6 @@ class CloudflareService {
                 }
             }
         } catch {
-            print("❌ Failed to check Workers for active builds: \(error)")
         }
         
         // Check for active Pages builds across all projects
@@ -164,7 +163,6 @@ class CloudflareService {
                 }
             }
         } catch {
-            print("❌ Failed to check Pages for active builds: \(error)")
         }
         
         // Check audit logs for recent deployment activity
@@ -370,7 +368,7 @@ class CloudflareService {
         
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
-            print("❌ Worker deployments API returned status: \(statusCode)")
+
             throw CloudflareError.invalidResponse
         }
         
@@ -378,7 +376,7 @@ class CloudflareService {
         do {
             let deploymentsResponse = try decoder.decode(WorkerDeploymentsResponse.self, from: data)
             if !deploymentsResponse.success {
-                print("❌ Worker deployments API returned success=false: \(deploymentsResponse.errors)")
+
                 throw CloudflareError.apiError(deploymentsResponse.errors)
             }
             // Prioritize in-progress deployments, otherwise return the latest
@@ -394,62 +392,49 @@ class CloudflareService {
         }
     }
     
+    func fetchWorkerBuilds(accountId: String, workerTag: String, limit: Int = 25) async throws -> [WorkerBuild] {
+        let apiKey = try getApiKey()
+        let url = URL(string: "\(baseURL)/accounts/\(accountId)/builds/workers/\(workerTag)/builds")!
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw CloudflareError.invalidResponse
+        }
+        let buildsResponse = try JSONDecoder().decode(WorkerBuildsResponse.self, from: data)
+        if !buildsResponse.success {
+            throw CloudflareError.apiError(buildsResponse.errors)
+        }
+        return Array(buildsResponse.result.prefix(limit))
+    }
+
     func fetchBuildHistoryForWorkers(_ workers: [Worker], accountId: String) async throws -> [BuildStatus] {
         var buildStatuses: [BuildStatus] = []
-        
-        // For each visible worker, get the latest deployment and analyze for build patterns
+
         for worker in workers where worker.isVisible {
             do {
-                // Get multiple recent deployments to detect patterns
+                // Try the Builds API first if we have a tag
+                if let tag = worker.tag {
+                    let builds = try await fetchWorkerBuilds(accountId: accountId, workerTag: tag, limit: 25)
+                    if let latestBuild = builds.first {
+                        buildStatuses.append(latestBuild.toBuildStatus(workerName: worker.id))
+                        continue
+                    }
+                }
+
+                // Fall back to deployments API for workers without Builds enabled
                 let deployments = try await fetchWorkerDeployments(accountId: accountId, scriptName: worker.id, limit: 5)
-                
                 if let latestDeployment = deployments.first {
-                    // Check for deployment gaps that might indicate build failures
-                    let timeSinceLastDeployment = Date().timeIntervalSince(latestDeployment.created_on)
-                    
-                    // If we have audit log activity but no recent deployments, this might indicate a build failure
-                    let auditBuilds = try await fetchRecentDeploymentActivity(accountId: accountId)
-                    let recentAuditForWorker = auditBuilds.filter { 
-                        $0.projectName == worker.id && 
-                        Date().timeIntervalSince($0.createdAt) < 3600 // Last hour
-                    }
-                    
-                    // Enhanced failure detection logic
-                    var buildStatus = latestDeployment.toBuildStatus(workerName: worker.id)
-                    
-                    // If we have recent audit activity but the latest deployment is old, suspect a build failure
-                    if !recentAuditForWorker.isEmpty && timeSinceLastDeployment > 1800 { // 30 minutes
-                        buildStatus = BuildStatus(
-                            id: "suspected-failure-\(worker.id)-\(Date().timeIntervalSince1970)",
-                            projectId: worker.id,
-                            projectName: worker.id,
-                            projectType: .worker,
-                            status: .failure,
-                            createdAt: recentAuditForWorker.first?.createdAt ?? Date(),
-                            completedAt: recentAuditForWorker.first?.createdAt ?? Date(),
-                            environment: "production",
-                            deploymentId: nil,
-                            commitHash: nil,
-                            branch: "main",
-                            commitMessage: "Build may have failed - detected deployment gap"
-                        )
-                        
-                        if worker.id == "demokit-app" {
-                            print("🚨 Detected suspected build failure for \(worker.id) - audit activity without recent deployment")
-                        }
-                    }
-                    
-                    buildStatuses.append(buildStatus)
+                    buildStatuses.append(latestDeployment.toBuildStatus(workerName: worker.id))
                 } else {
-                    // No deployments found - use worker default status
                     buildStatuses.append(worker.toBuildStatus())
                 }
             } catch {
-                // Continue with other workers if one fails, use fallback
                 buildStatuses.append(worker.toBuildStatus())
             }
         }
-        
+
         return buildStatuses.sorted { $0.createdAt > $1.createdAt }
     }
     
@@ -473,7 +458,6 @@ class CloudflareService {
                 }
             } catch {
                 // Continue with other projects if one fails
-                print("Failed to fetch deployments for pages project \(project.name): \(error)")
             }
         }
         

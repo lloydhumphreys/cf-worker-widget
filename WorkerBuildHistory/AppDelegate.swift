@@ -1,14 +1,23 @@
 import Cocoa
 import SwiftUI
 
+class BorderlessKeyWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+}
+
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusBarItem: NSStatusItem?
     var window: NSWindow?
     
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Request notification permissions
         NotificationManager.shared.requestNotificationPermission()
-        
+
+        // Fetch build history immediately on launch
+        Task {
+            await DataManager.shared.refreshBuildHistory(force: true)
+            DataManager.shared.setAutoRefresh(enabled: true)
+        }
+
         statusBarItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusBarItem?.button {
             button.action = #selector(statusBarButtonClicked(_:))
@@ -41,7 +50,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return existingWindow
         }
         let contentView = BuildHistoryView()
-        window = NSWindow(
+        window = BorderlessKeyWindow(
             contentRect: size,
             styleMask: [.borderless, .resizable],
             backing: .buffered,

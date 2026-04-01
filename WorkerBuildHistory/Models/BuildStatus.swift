@@ -126,6 +126,96 @@ struct PagesDeploymentsResponse: Codable {
     let errors: [APIError]
 }
 
+// Workers Builds API models
+struct WorkerBuild: Codable {
+    let build_uuid: String
+    let status: String
+    let build_outcome: String?
+    let created_on: String
+    let stopped_on: String?
+    let trigger: WorkerBuildTrigger?
+}
+
+struct WorkerBuildTrigger: Codable {
+    let trigger_name: String?
+    let branch_includes: [String]?
+    let repo_connection: WorkerBuildRepoConnection?
+    let build_trigger_metadata: WorkerBuildTriggerMetadata?
+}
+
+struct WorkerBuildRepoConnection: Codable {
+    let repo_name: String?
+    let provider_type: String?
+}
+
+struct WorkerBuildTriggerMetadata: Codable {
+    let branch: String?
+    let commit_hash: String?
+    let commit_message: String?
+}
+
+struct WorkerBuildsResponse: Codable {
+    let success: Bool
+    let result: [WorkerBuild]
+    let errors: [APIError]
+}
+
+extension WorkerBuild {
+    func toBuildStatus(workerName: String) -> BuildStatus {
+        let buildStatus: BuildStatus.BuildStatusType
+        let outcome = build_outcome?.lowercased() ?? ""
+        let st = status.lowercased()
+
+        if outcome == "failure" || st == "failed" {
+            buildStatus = .failure
+        } else if st == "running" || st == "building" || st == "initializing" {
+            buildStatus = .inProgress
+        } else if st == "queued" || st == "pending" {
+            buildStatus = .queued
+        } else if outcome == "success" {
+            buildStatus = .success
+        } else if outcome == "canceled" || st == "canceled" {
+            buildStatus = .canceled
+        } else {
+            buildStatus = .queued
+        }
+
+        let created = Self.parseDate(from: created_on) ?? Date()
+        let completed = stopped_on.flatMap { Self.parseDate(from: $0) }
+
+        // Git metadata from trigger
+        let metadata = trigger?.build_trigger_metadata
+        let branch = metadata?.branch ?? trigger?.branch_includes?.first
+        let commitHash = metadata?.commit_hash
+        let commitMessage = metadata?.commit_message
+
+        return BuildStatus(
+            id: build_uuid,
+            projectId: workerName,
+            projectName: workerName,
+            projectType: .worker,
+            status: buildStatus,
+            createdAt: created,
+            completedAt: buildStatus.isComplete ? (completed ?? created) : nil,
+            environment: "production",
+            deploymentId: build_uuid,
+            commitHash: commitHash,
+            branch: branch,
+            commitMessage: commitMessage ?? "Build \(outcome)"
+        )
+    }
+
+    private static func parseDate(from dateString: String) -> Date? {
+        let iso8601Fractional = ISO8601DateFormatter()
+        iso8601Fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = iso8601Fractional.date(from: dateString) {
+            return date
+        }
+        let iso8601 = ISO8601DateFormatter()
+        return iso8601.date(from: dateString)
+    }
+}
+
 // Extensions to convert API models to unified BuildStatus
 extension WorkerDeployment {
     func toBuildStatus(workerName: String) -> BuildStatus {

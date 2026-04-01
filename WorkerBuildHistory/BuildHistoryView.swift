@@ -126,14 +126,12 @@ struct BuildHistoryView: View {
                 .frame(width: 550, height: 450)
         }
         .onAppear {
-            dataManager.setAutoRefresh(enabled: autoRefreshEnabled)
-            // Smart refresh on app open - shows cached data instantly, then updates as needed
-            Task {
-                await dataManager.smartRefresh()
+            // Show cached data immediately if available, fresh data loads in background
+            if dataManager.buildHistory.isEmpty {
+                Task {
+                    await dataManager.smartRefresh()
+                }
             }
-        }
-        .onDisappear {
-            dataManager.stopPeriodicRefresh()
         }
     }
     
