@@ -25,28 +25,28 @@ class NotificationManager {
     
     func checkForBuildStatusChanges(_ newBuildHistory: [BuildStatus]) {
         let previousStatuses = getLastKnownStatuses()
+
+        // First load — save baseline without notifying
+        if previousStatuses.isEmpty {
+            saveLastKnownStatuses(newBuildHistory)
+            return
+        }
+
         var newFailures: [BuildStatus] = []
-        
+
         for build in newBuildHistory {
             let buildKey = "\(build.projectName)_\(build.projectType.rawValue)"
             let previousStatus = previousStatuses[buildKey]
-            
-            // Check for new failures
-            if build.status == .failure {
-                if previousStatus != .failure {
-                    // This is a new failure or first time seeing this project
-                    newFailures.append(build)
-                    print("🚨 NotificationManager: New failure detected for \(build.projectName)")
-                }
+
+            if build.status == .failure && previousStatus != .failure {
+                newFailures.append(build)
             }
         }
-        
-        // Send notifications for new failures
+
         for failure in newFailures {
             sendBuildFailureNotification(failure)
         }
-        
-        // Update stored statuses
+
         saveLastKnownStatuses(newBuildHistory)
     }
     
