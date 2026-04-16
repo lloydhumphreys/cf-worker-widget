@@ -6,32 +6,16 @@ class WorkersViewModel: ObservableObject {
     @Published var selectedAccountId: String? = nil
     @Published var workers: [Worker] = []
     @Published var pagesProjects: [PagesProject] = []
-    @Published var buildHistory: [BuildStatus] = []
     @Published var isLoading = false
     @Published var error: String?
     @Published var isActive: Bool = true
     
-    private var currentTasks: [Task<Void, Never>] = []
-    
-    func cancelAllTasks() {
-        currentTasks.forEach { $0.cancel() }
-        currentTasks.removeAll()
-        isActive = false
-    }
-    
     func deactivate() {
-        cancelAllTasks()
+        isActive = false
         // Clear data to prevent stale state
         workers = []
         pagesProjects = []
-        buildHistory = []
         error = nil
-    }
-    
-    private func addTask(_ task: Task<Void, Never>) {
-        currentTasks.append(task)
-        // Clean up cancelled tasks
-        currentTasks.removeAll { $0.isCancelled }
     }
     
     func loadAccounts() async {
@@ -43,14 +27,19 @@ class WorkersViewModel: ObservableObject {
             accounts = try await CloudflareService.shared.fetchAccounts()
             guard isActive else { return }
 
-            if let first = accounts.first {
-                selectedAccountId = first.id
-                await loadWorkers(for: first.id)
-                await loadPagesProjects(for: first.id)
+            let preferredAccountId = selectedAccountId.flatMap { currentId in
+                accounts.contains(where: { $0.id == currentId }) ? currentId : nil
+            } ?? accounts.first?.id
+
+            if let preferredAccountId {
+                selectedAccountId = preferredAccountId
+                await loadWorkers(for: preferredAccountId)
+                await loadPagesProjects(for: preferredAccountId)
             }
         } catch {
             guard isActive else { return }
             self.error = error.localizedDescription
+            DiagnosticsManager.shared.recordError(error, category: "workers", message: "Failed to load Cloudflare accounts")
         }
 
         guard isActive else { return }
@@ -62,12 +51,18 @@ class WorkersViewModel: ObservableObject {
         isLoading = true
         error = nil
         do {
-            workers = try await CloudflareService.shared.fetchWorkers(accountId: accountId)
-            // Notify data manager that workers were loaded
-            DataManager.shared.onWorkersLoaded()
+            var loadedWorkers = try await CloudflareService.shared.fetchWorkers(accountId: accountId)
+            AppPreferences.applyWorkerVisibility(to: &loadedWorkers)
+            workers = loadedWorkers
         } catch {
             guard isActive else { return }
             self.error = error.localizedDescription
+            DiagnosticsManager.shared.recordError(
+                error,
+                category: "workers",
+                message: "Failed to load Workers",
+                metadata: ["accountId": accountId]
+            )
         }
         guard isActive else { return }
         isLoading = false
@@ -78,62 +73,32 @@ class WorkersViewModel: ObservableObject {
         isLoading = true
         error = nil
         do {
-            pagesProjects = try await CloudflareService.shared.fetchPagesProjects(accountId: accountId)
-            // Notify data manager that pages were loaded
-            DataManager.shared.onWorkersLoaded()
+            var loadedPagesProjects = try await CloudflareService.shared.fetchPagesProjects(accountId: accountId)
+            AppPreferences.applyPagesVisibility(to: &loadedPagesProjects)
+            pagesProjects = loadedPagesProjects
         } catch {
             guard isActive else { return }
             self.error = error.localizedDescription
+            DiagnosticsManager.shared.recordError(
+                error,
+                category: "workers",
+                message: "Failed to load Pages projects",
+                metadata: ["accountId": accountId]
+            )
         }
         guard isActive else { return }
         isLoading = false
     }
-    
-    func toggleWorkerVisibility(_ worker: Worker) {
-        if let index = workers.firstIndex(where: { $0.id == worker.id }) {
-            workers[index].isVisible.toggle()
-            Task {
-                DataManager.shared.onVisibilityChanged()
-            }
-        }
-    }
-    
-    func enableAll() {
+
+    func setAllVisibility(_ isVisible: Bool) {
         for i in workers.indices {
-            workers[i].isVisible = true
+            workers[i].isVisible = isVisible
         }
-        Task {
-            DataManager.shared.onVisibilityChanged()
+
+        for i in pagesProjects.indices {
+            pagesProjects[i].isVisible = isVisible
         }
+
+        AppPreferences.saveVisibilitySettings(workers: workers, pagesProjects: pagesProjects)
     }
-    
-    func disableAll() {
-        for i in workers.indices {
-            workers[i].isVisible = false
-        }
-        Task {
-            DataManager.shared.onVisibilityChanged()
-        }
-    }
-    
-    func loadBuildHistory() async {
-        guard isActive, let accountId = selectedAccountId else { return }
-        
-        do {
-            async let workerBuilds = CloudflareService.shared.fetchBuildHistoryForWorkers(workers, accountId: accountId)
-            async let pagesBuilds = CloudflareService.shared.fetchBuildHistoryForPages(pagesProjects, accountId: accountId)
-            
-            let allBuilds = try await workerBuilds + pagesBuilds
-            guard isActive else { return }
-            
-            buildHistory = allBuilds.sorted { $0.createdAt > $1.createdAt }
-        } catch {
-            guard isActive else { return }
-            self.error = error.localizedDescription
-        }
-    }
-    
-    func refreshBuildHistory() async {
-        await loadBuildHistory()
-    }
-} 
+}

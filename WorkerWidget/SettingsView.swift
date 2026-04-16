@@ -10,7 +10,6 @@ struct SettingsView: View {
     @State private var apiKey: String = ""
     @State private var errorMessage: String?
     @StateObject private var workersViewModel = WorkersViewModel()
-    @Environment(\.dismiss) private var dismiss
     
     var body: some View {
         TabView {
@@ -23,31 +22,24 @@ struct SettingsView: View {
                 .tabItem {
                     Label("Workers & Pages", systemImage: "server.rack")
                 }
-        }
-        .frame(width: 500, height: 400)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Save & Close") {
-                    saveAllSettings()
-                    dismiss()
+
+            DebugSettingsView()
+                .tabItem {
+                    Label("Debug", systemImage: "ladybug")
                 }
-            }
-            ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") {
-                    dismiss()
-                }
-            }
         }
+        .frame(width: 620, height: 460)
         .onAppear {
             loadApiKey()
             Task {
                 await workersViewModel.loadAccounts()
-                // Load saved visibility settings after accounts are loaded
-                loadVisibilitySettings()
             }
         }
         .onDisappear {
             workersViewModel.deactivate()
+            Task {
+                await DataManager.shared.refreshBuildHistory(force: true)
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: .apiKeyUpdated)) { _ in
             Task {
@@ -61,60 +53,7 @@ struct SettingsView: View {
             apiKey = try KeychainManager.shared.getApiKey() ?? ""
         } catch {
             errorMessage = error.localizedDescription
-        }
-    }
-    
-    private func saveAllSettings() {
-        // Save API key if it has changed
-        if !apiKey.isEmpty {
-            do {
-                try KeychainManager.shared.saveApiKey(apiKey)
-            } catch {
-                errorMessage = error.localizedDescription
-                return
-            }
-        }
-        
-        // Save visibility settings directly
-        saveVisibilitySettings()
-        
-        // Update build history with the new settings (force refresh since user explicitly saved)
-        Task {
-            await DataManager.shared.refreshBuildHistory(force: true)
-        }
-    }
-    
-    private func saveVisibilitySettings() {
-        let workerSettings = workersViewModel.workers.reduce(into: [String: Bool]()) { result, worker in
-            result[worker.id] = worker.isVisible
-        }
-        
-        let pagesSettings = workersViewModel.pagesProjects.reduce(into: [String: Bool]()) { result, project in
-            result[project.id] = project.isVisible
-        }
-        
-        UserDefaults.standard.set(workerSettings, forKey: "workerVisibilitySettings")
-        UserDefaults.standard.set(pagesSettings, forKey: "pagesVisibilitySettings")
-    }
-    
-    private func loadVisibilitySettings() {
-        guard let workerSettings = UserDefaults.standard.dictionary(forKey: "workerVisibilitySettings") as? [String: Bool],
-              let pagesSettings = UserDefaults.standard.dictionary(forKey: "pagesVisibilitySettings") as? [String: Bool] else {
-            return
-        }
-        
-        // Apply saved settings to workers
-        for i in workersViewModel.workers.indices {
-            if let savedVisibility = workerSettings[workersViewModel.workers[i].id] {
-                workersViewModel.workers[i].isVisible = savedVisibility
-            }
-        }
-        
-        // Apply saved settings to pages projects
-        for i in workersViewModel.pagesProjects.indices {
-            if let savedVisibility = pagesSettings[workersViewModel.pagesProjects[i].id] {
-                workersViewModel.pagesProjects[i].isVisible = savedVisibility
-            }
+            DiagnosticsManager.shared.recordError(error, category: "settings", message: "Failed to load API key from keychain")
         }
     }
 }
@@ -201,11 +140,16 @@ struct ConnectionView: View {
             try KeychainManager.shared.saveApiKey(apiKey)
             CloudflareService.shared.clearCachedApiKey()
             errorMessage = nil
+            DiagnosticsManager.shared.log(.info, category: "settings", message: "Saved Cloudflare API key")
 
             // Trigger loading of accounts after successful save
             NotificationCenter.default.post(name: .apiKeyUpdated, object: nil)
+            Task {
+                await DataManager.shared.refreshBuildHistory(force: true)
+            }
         } catch {
             errorMessage = error.localizedDescription
+            DiagnosticsManager.shared.recordError(error, category: "settings", message: "Failed to save API key to keychain")
         }
     }
 }
@@ -236,16 +180,10 @@ struct WorkersView: View {
             // Enable/Disable All
             HStack {
                 Button("Enable All") {
-                    viewModel.enableAll()
-                    for i in viewModel.pagesProjects.indices {
-                        viewModel.pagesProjects[i].isVisible = true
-                    }
+                    viewModel.setAllVisibility(true)
                 }
                 Button("Disable All") {
-                    viewModel.disableAll()
-                    for i in viewModel.pagesProjects.indices {
-                        viewModel.pagesProjects[i].isVisible = false
-                    }
+                    viewModel.setAllVisibility(false)
                 }
             }
             .padding(.horizontal)
@@ -271,6 +209,10 @@ struct WorkersView: View {
                                         set: { newValue in
                                             guard viewModel.isActive else { return }
                                             worker.isVisible = newValue
+                                            AppPreferences.saveVisibilitySettings(
+                                                workers: viewModel.workers,
+                                                pagesProjects: viewModel.pagesProjects
+                                            )
                                         }
                                     ))
                                     .disabled(!viewModel.isActive)
@@ -294,6 +236,10 @@ struct WorkersView: View {
                                         set: { newValue in
                                             guard viewModel.isActive else { return }
                                             project.isVisible = newValue
+                                            AppPreferences.saveVisibilitySettings(
+                                                workers: viewModel.workers,
+                                                pagesProjects: viewModel.pagesProjects
+                                            )
                                         }
                                     ))
                                     .disabled(!viewModel.isActive)

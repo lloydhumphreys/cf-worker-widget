@@ -1,8 +1,6 @@
 import SwiftUI
 
 struct BuildHistoryView: View {
-    @State private var showingSettings = false
-    @State private var autoRefreshEnabled = true
     @State private var selectedProject: BuildStatus?
     @State private var detailBuilds: [BuildStatus] = []
     @State private var loadingDetail = false
@@ -51,14 +49,13 @@ struct BuildHistoryView: View {
                     .frame(width: 16, height: 16)
 
                     Button(action: {
-                        autoRefreshEnabled.toggle()
-                        dataManager.setAutoRefresh(enabled: autoRefreshEnabled)
+                        dataManager.setAutoRefresh(enabled: !dataManager.autoRefreshEnabled)
                     }) {
                         HStack(spacing: 4) {
                             Circle()
-                                .fill(autoRefreshEnabled ? .green : Color.secondary.opacity(0.4))
+                                .fill(dataManager.autoRefreshEnabled ? .green : Color.secondary.opacity(0.4))
                                 .frame(width: 6, height: 6)
-                            Text(autoRefreshEnabled ? "Auto" : "Paused")
+                            Text(dataManager.autoRefreshEnabled ? "Auto" : "Paused")
                                 .font(.system(size: 11, weight: .medium))
                         }
                         .foregroundColor(.secondary)
@@ -68,11 +65,7 @@ struct BuildHistoryView: View {
                     Spacer()
                 }
 
-                Button(action: {
-                    if !showingSettings {
-                        showingSettings = true
-                    }
-                }) {
+                SettingsLink {
                     Image(systemName: "gearshape")
                         .font(.system(size: 13, weight: .medium))
                 }
@@ -112,10 +105,6 @@ struct BuildHistoryView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.background.opacity(0.6))
-        .sheet(isPresented: $showingSettings) {
-            SettingsView()
-                .frame(width: 550, height: 450)
-        }
         .onAppear {
             if dataManager.buildHistory.isEmpty {
                 Task {
@@ -161,8 +150,8 @@ struct BuildHistoryView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
 
-                    Button("Add API Key") {
-                        showingSettings = true
+                    SettingsLink {
+                        Text("Add API Key")
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
@@ -251,7 +240,9 @@ struct BuildHistoryView: View {
             .padding(.vertical, 40)
         } else {
             ForEach(detailBuilds) { build in
-                DetailBuildRow(build: build)
+                DetailBuildRow(build: build, onOpen: {
+                    openBuildInBrowser(build)
+                })
                     .contentShape(Rectangle())
                     .onTapGesture {
                         openBuildInBrowser(build)
@@ -268,28 +259,11 @@ struct BuildHistoryView: View {
 
     private func openBuildInBrowser(_ build: BuildStatus) {
         guard let accountId = dataManager.workersViewModel.selectedAccountId else { return }
-
-        let urlString: String
-        if build.projectType == .worker {
-            if let buildId = build.deploymentId, build.branch != "wrangler" {
-                // Builds API item — link to specific build
-                urlString = "https://dash.cloudflare.com/\(accountId)/workers/services/view/\(build.projectName)/production/builds/\(buildId)"
-            } else {
-                // Deployment/wrangler item — link to worker overview
-                urlString = "https://dash.cloudflare.com/\(accountId)/workers/services/view/\(build.projectName)/production"
-            }
-        } else {
-            if let deploymentId = build.deploymentId {
-                urlString = "https://dash.cloudflare.com/\(accountId)/pages/view/\(build.projectName)/\(deploymentId)"
-            } else {
-                urlString = "https://dash.cloudflare.com/\(accountId)/pages/view/\(build.projectName)"
-            }
-        }
-
-        if let url = URL(string: urlString) {
+        if let url = BuildDestination.dashboardURL(for: build, accountId: accountId) {
             NSWorkspace.shared.open(url)
         }
     }
+
 }
 
 // MARK: - Build History Row (summary)
@@ -373,6 +347,7 @@ struct BuildHistoryRow: View {
 
 struct DetailBuildRow: View {
     let build: BuildStatus
+    let onOpen: (() -> Void)?
 
     @State private var isHovered = false
 
@@ -432,6 +407,16 @@ struct DetailBuildRow: View {
                         }
                     }
                 }
+            }
+
+            if let onOpen {
+                Button(action: onOpen) {
+                    Image(systemName: "arrow.up.forward.square")
+                        .font(.system(size: 12, weight: .medium))
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary)
+                .help("Open in Cloudflare")
             }
         }
         .padding(.vertical, 6)

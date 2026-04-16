@@ -47,15 +47,28 @@ class CloudflareService {
         let (data, response) = try await session.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse else {
+            DiagnosticsManager.shared.log(.error, category: "cloudflare", message: "Accounts request returned a non-HTTP response")
             throw CloudflareError.invalidResponse
         }
         
         if httpResponse.statusCode != 200 {
+            DiagnosticsManager.shared.log(
+                .error,
+                category: "cloudflare",
+                message: "Accounts request failed",
+                metadata: ["statusCode": "\(httpResponse.statusCode)"]
+            )
             throw CloudflareError.httpError(statusCode: httpResponse.statusCode)
         }
         
         let accountsResponse = try JSONDecoder().decode(AccountsResponse.self, from: data)
         if !accountsResponse.success {
+            DiagnosticsManager.shared.log(
+                .error,
+                category: "cloudflare",
+                message: "Cloudflare accounts API returned an error",
+                metadata: ["errors": accountsResponse.errors.map(\.message).joined(separator: " | ")]
+            )
             throw CloudflareError.apiError(accountsResponse.errors)
         }
         return accountsResponse.result
@@ -69,11 +82,17 @@ class CloudflareService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw CloudflareError.invalidResponse
+            throw responseError(for: url, response: response)
         }
         let decoder = createJSONDecoder()
         let workersResponse = try decoder.decode(WorkersResponse.self, from: data)
         if !workersResponse.success {
+            DiagnosticsManager.shared.log(
+                .error,
+                category: "cloudflare",
+                message: "Workers API returned an error",
+                metadata: ["accountId": accountId, "errors": workersResponse.errors.map(\.message).joined(separator: " | ")]
+            )
             throw CloudflareError.apiError(workersResponse.errors)
         }
         // Set all workers to visible by default
@@ -90,10 +109,19 @@ class CloudflareService {
         var request = URLRequest(url: url)
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let (data, _) = try await session.data(for: request)
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            throw responseError(for: url, response: response)
+        }
         let decoder = createJSONDecoder()
         let projectsResponse = try decoder.decode(PagesProjectsResponse.self, from: data)
         if !projectsResponse.success {
+            DiagnosticsManager.shared.log(
+                .error,
+                category: "cloudflare",
+                message: "Pages projects API returned an error",
+                metadata: ["accountId": accountId, "errors": projectsResponse.errors.map(\.message).joined(separator: " | ")]
+            )
             throw CloudflareError.apiError(projectsResponse.errors)
         }
         return projectsResponse.result
@@ -108,242 +136,22 @@ class CloudflareService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw CloudflareError.invalidResponse
+            throw responseError(for: url, response: response)
         }
         let decoder = createJSONDecoder()
         let deploymentsResponse = try decoder.decode(PagesDeploymentsResponse.self, from: data)
         if !deploymentsResponse.success {
+            DiagnosticsManager.shared.log(
+                .error,
+                category: "cloudflare",
+                message: "Pages deployments API returned an error",
+                metadata: ["accountId": accountId, "project": projectName, "errors": deploymentsResponse.errors.map(\.message).joined(separator: " | ")]
+            )
             throw CloudflareError.apiError(deploymentsResponse.errors)
         }
-        
-        
         return deploymentsResponse.result
     }
-    
-    // New function to specifically look for active/in-progress builds
-    func fetchActiveBuilds(accountId: String) async throws -> [BuildStatus] {
-        var activeBuilds: [BuildStatus] = []
-        
-        // Check for active Worker deployments across all workers
-        do {
-            let workers = try await fetchWorkers(accountId: accountId)
-            for worker in workers {
-                
-                // Get multiple deployments to check for any in-progress ones
-                let deployments = try await fetchWorkerDeployments(accountId: accountId, scriptName: worker.id, limit: 25)
-                
-                // Look specifically for active/in-progress deployments
-                let activeDeployments = deployments.filter { deployment in
-                    // Check for gradual rollouts (percentage < 100%)
-                    let hasPartialRollout = deployment.strategy.lowercased() == "percentage" && 
-                                          deployment.versions.contains(where: { $0.percentage < 100 })
-                    
-                    // Check for recent deployments that might still be rolling out
-                    let isVeryRecent = Date().timeIntervalSince(deployment.created_on) < 300 // 5 minutes
-                    
-                    let isActive = hasPartialRollout || (isVeryRecent && deployment.strategy.lowercased() == "percentage")
-                    return isActive
-                }
-                
-                for deployment in activeDeployments {
-                    let buildStatus = deployment.toBuildStatus(workerName: worker.id)
-                    activeBuilds.append(buildStatus)
-                }
-            }
-        } catch {
-        }
-        
-        // Check for active Pages builds across all projects
-        do {
-            let projects = try await fetchPagesProjects(accountId: accountId)
-            for project in projects {
-                let deployments = try await fetchPagesDeployments(accountId: accountId, projectName: project.name, limit: 50)
-                
-                // Look specifically for active builds
-                let activeDeployments = deployments.filter { deployment in
-                    let status = deployment.latest_stage.status.lowercased()
-                    return ["active", "building", "in_progress", "deploying", "queued", "pending"].contains(status)
-                }
-                
-                for deployment in activeDeployments {
-                    let buildStatus = deployment.toBuildStatus(projectName: project.name)
-                    activeBuilds.append(buildStatus)
-                }
-            }
-        } catch {
-        }
-        
-        // Check audit logs for recent deployment activity
-        do {
-            let auditBuilds = try await fetchRecentDeploymentActivity(accountId: accountId)
-            activeBuilds.append(contentsOf: auditBuilds)
-        } catch {
-            // Silently continue if audit logs fail
-        }
-        
-        return activeBuilds
-    }
-    
-    // Parse audit logs for recent deployment activities
-    func fetchRecentDeploymentActivity(accountId: String) async throws -> [BuildStatus] {
-        let apiKey = try getApiKey()
-        let url = URL(string: "\(baseURL)/accounts/\(accountId)/audit_logs?direction=desc&per_page=100")!
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        
-        let (data, response) = try await session.data(for: request)
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw CloudflareError.invalidResponse
-        }
-        
-        // Parse audit logs for deployment events
-        if let jsonObject = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let result = jsonObject["result"] as? [[String: Any]] {
-            
-            var buildStatuses: [BuildStatus] = []
-            let now = Date()
-            let recentThreshold = now.addingTimeInterval(-3600) // Last hour
-            
-            for log in result {
-                // Look for worker deployment events
-                if let action = log["action"] as? [String: Any],
-                   let actionType = action["type"] as? String,
-                   let metadata = log["metadata"] as? [String: Any],
-                   let whenString = log["when"] as? String,
-                   let resourceType = log["resource"] as? [String: Any],
-                   let type = resourceType["type"] as? String {
-                    
-                    // Parse timestamp
-                    let formatter = ISO8601DateFormatter()
-                    guard let when = formatter.date(from: whenString),
-                          when > recentThreshold else { continue }
-                    
-                    // Check for worker script events
-                    if type == "worker_script" || actionType.contains("deploy") {
-                        if let scriptName = metadata["script_name"] as? String {
-                            
-                            let status: BuildStatus.BuildStatusType
-                            if actionType.contains("delete") {
-                                status = .canceled
-                            } else if actionType.contains("update") || actionType.contains("create") {
-                                status = .success
-                            } else {
-                                continue
-                            }
-                            
-                            
-                            let buildStatus = BuildStatus(
-                                id: "audit-\(scriptName)-\(when.timeIntervalSince1970)",
-                                projectId: scriptName,
-                                projectName: scriptName,
-                                projectType: .worker,
-                                status: status,
-                                createdAt: when,
-                                completedAt: when,
-                                environment: "production",
-                                deploymentId: nil,
-                                commitHash: nil,
-                                branch: "wrangler",
-                                commitMessage: "Deployment via \(actionType)"
-                            )
-                            buildStatuses.append(buildStatus)
-                        }
-                    }
-                }
-            }
-            
-            return buildStatuses
-        }
-        
-        return []
-    }
-    
-    
-    
-    
-    
-    
-    // Parse build statuses from the builds API response
-    private func parseBuildStatuses(from builds: [[String: Any]], scriptName: String) -> [BuildStatus] {
-        var buildStatuses: [BuildStatus] = []
-        
-        for build in builds {
-            if let buildId = build["id"] as? String,
-               let buildOutcome = build["build_outcome"] as? String,
-               let status = build["status"] as? String {
-                
-                // Parse timestamps if available
-                var createdAt = Date()
-                var completedAt: Date? = nil
-                
-                if let createdAtString = build["created_at"] as? String {
-                    createdAt = parseDate(from: createdAtString) ?? Date()
-                }
-                
-                if let completedAtString = build["completed_at"] as? String {
-                    completedAt = parseDate(from: completedAtString)
-                }
-                
-                // Map build outcome to our status
-                let buildStatus: BuildStatus.BuildStatusType
-                if buildOutcome == "fail" || status == "stopped" || status == "failed" {
-                    buildStatus = .failure
-                } else if status == "running" || status == "building" {
-                    buildStatus = .inProgress
-                } else if status == "queued" || status == "pending" {
-                    buildStatus = .queued
-                } else if buildOutcome == "success" || status == "completed" {
-                    buildStatus = .success
-                } else {
-                    buildStatus = .queued
-                }
-                
-                // Get additional metadata
-                let commitHash = build["commit_hash"] as? String
-                let branch = build["branch"] as? String ?? "main"
-                let message = build["message"] as? String
-                
-                
-                let buildStatusEntry = BuildStatus(
-                    id: buildId,
-                    projectId: scriptName,
-                    projectName: scriptName,
-                    projectType: .worker,
-                    status: buildStatus,
-                    createdAt: createdAt,
-                    completedAt: buildStatus.isComplete ? (completedAt ?? createdAt) : nil,
-                    environment: "production",
-                    deploymentId: buildId,
-                    commitHash: commitHash,
-                    branch: branch,
-                    commitMessage: message ?? "Build \(buildOutcome)"
-                )
-                
-                buildStatuses.append(buildStatusEntry)
-            }
-        }
-        
-        // Sort by creation date, most recent first
-        return buildStatuses.sorted { $0.createdAt > $1.createdAt }
-    }
-    
-    // Helper function to parse dates from various formats
-    private func parseDate(from dateString: String) -> Date? {
-        // Try ISO8601 with fractional seconds first
-        let iso8601Formatter = ISO8601DateFormatter()
-        iso8601Formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = iso8601Formatter.date(from: dateString) {
-            return date
-        }
-        
-        // Fallback to standard ISO8601
-        let standardFormatter = ISO8601DateFormatter()
-        return standardFormatter.date(from: dateString)
-    }
-    
-    
-    
+
     func fetchWorkerDeployments(accountId: String, scriptName: String, limit: Int = 25) async throws -> [WorkerDeployment] {
         let apiKey = try getApiKey()
         let url = URL(string: "\(baseURL)/accounts/\(accountId)/workers/scripts/\(scriptName)/deployments?limit=\(limit)")!
@@ -353,49 +161,22 @@ class CloudflareService {
         let (data, response) = try await session.data(for: request)
         
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw CloudflareError.invalidResponse
+            throw responseError(for: url, response: response)
         }
         
         let decoder = createJSONDecoder()
         let deploymentsResponse = try decoder.decode(WorkerDeploymentsResponse.self, from: data)
         if !deploymentsResponse.success {
+            DiagnosticsManager.shared.log(
+                .error,
+                category: "cloudflare",
+                message: "Worker deployments API returned an error",
+                metadata: ["accountId": accountId, "script": scriptName, "errors": deploymentsResponse.errors.map(\.message).joined(separator: " | ")]
+            )
             throw CloudflareError.apiError(deploymentsResponse.errors)
         }
         
         return deploymentsResponse.result.deployments
-    }
-    
-    func fetchLatestWorkerDeployment(accountId: String, scriptName: String) async throws -> WorkerDeployment? {
-        let apiKey = try getApiKey()
-        // Get more deployments to catch in-progress ones
-        let url = URL(string: "\(baseURL)/accounts/\(accountId)/workers/scripts/\(scriptName)/deployments?limit=10")!
-        var request = URLRequest(url: url)
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        let (data, response) = try await session.data(for: request)
-        
-        guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw CloudflareError.invalidResponse
-        }
-        
-        let decoder = createJSONDecoder()
-        do {
-            let deploymentsResponse = try decoder.decode(WorkerDeploymentsResponse.self, from: data)
-            if !deploymentsResponse.success {
-
-                throw CloudflareError.apiError(deploymentsResponse.errors)
-            }
-            // Prioritize in-progress deployments, otherwise return the latest
-            let inProgressDeployment = deploymentsResponse.result.deployments.first { deployment in
-                deployment.strategy.lowercased() == "percentage" && 
-                deployment.versions.contains(where: { $0.percentage < 100 })
-            }
-            
-            let selectedDeployment = inProgressDeployment ?? deploymentsResponse.result.deployments.first
-            return selectedDeployment
-        } catch {
-            throw error
-        }
     }
     
     func fetchWorkerBuilds(accountId: String, workerTag: String, limit: Int = 25) async throws -> [WorkerBuild] {
@@ -406,10 +187,16 @@ class CloudflareService {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let (data, response) = try await session.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw CloudflareError.invalidResponse
+            throw responseError(for: url, response: response)
         }
         let buildsResponse = try JSONDecoder().decode(WorkerBuildsResponse.self, from: data)
         if !buildsResponse.success {
+            DiagnosticsManager.shared.log(
+                .error,
+                category: "cloudflare",
+                message: "Worker builds API returned an error",
+                metadata: ["accountId": accountId, "workerTag": workerTag, "errors": buildsResponse.errors.map(\.message).joined(separator: " | ")]
+            )
             throw CloudflareError.apiError(buildsResponse.errors)
         }
         return Array(buildsResponse.result.prefix(limit))
@@ -420,28 +207,60 @@ class CloudflareService {
 
         for worker in workers where worker.isVisible {
             do {
-                // Try the Builds API first if we have a tag
                 if let tag = worker.tag {
-                    let builds = try await fetchWorkerBuilds(accountId: accountId, workerTag: tag, limit: 25)
-                    if let latestBuild = builds.first {
-                        buildStatuses.append(latestBuild.toBuildStatus(workerName: worker.id))
-                        continue
+                    // Fetch both Builds API and Deployments API concurrently
+                    async let buildsResult = fetchWorkerBuilds(accountId: accountId, workerTag: tag, limit: 1)
+                    async let deploysResult = fetchWorkerDeployments(accountId: accountId, scriptName: worker.id, limit: 1)
+
+                    let builds = (try? await buildsResult) ?? []
+                    let deployments = (try? await deploysResult) ?? []
+
+                    let latestBuild = builds.first?.toBuildStatus(workerName: worker.id)
+                    let latestDeploy = deployments.first?.toBuildStatus(workerName: worker.id)
+
+                    if let result = mostRecent(latestBuild, latestDeploy) {
+                        buildStatuses.append(result)
+                    } else {
+                        buildStatuses.append(worker.toBuildStatus())
+                    }
+                } else {
+                    // No tag — Deployments API only
+                    let deployments = try await fetchWorkerDeployments(accountId: accountId, scriptName: worker.id, limit: 5)
+                    if let latestDeployment = deployments.first {
+                        buildStatuses.append(latestDeployment.toBuildStatus(workerName: worker.id))
+                    } else {
+                        buildStatuses.append(worker.toBuildStatus())
                     }
                 }
-
-                // Fall back to deployments API for workers without Builds enabled
-                let deployments = try await fetchWorkerDeployments(accountId: accountId, scriptName: worker.id, limit: 5)
-                if let latestDeployment = deployments.first {
-                    buildStatuses.append(latestDeployment.toBuildStatus(workerName: worker.id))
-                } else {
-                    buildStatuses.append(worker.toBuildStatus())
-                }
             } catch {
+                DiagnosticsManager.shared.recordError(
+                    error,
+                    category: "cloudflare",
+                    message: "Fell back to default worker status after build lookup failed",
+                    metadata: ["accountId": accountId, "worker": worker.id]
+                )
                 buildStatuses.append(worker.toBuildStatus())
             }
         }
 
         return buildStatuses.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    /// Picks the most relevant status when both a git build and a deployment exist.
+    /// Prefers in-progress builds, then whichever is more recent.
+    private func mostRecent(_ build: BuildStatus?, _ deploy: BuildStatus?) -> BuildStatus? {
+        switch (build, deploy) {
+        case (nil, nil): return nil
+        case (let x?, nil): return x
+        case (nil, let y?): return y
+        case (let x?, let y?):
+            // In-progress build is always the most relevant event
+            if !x.status.isComplete { return x }
+            // If deploy is newer, it's a distinct manual deploy
+            if y.createdAt > x.createdAt { return y }
+            // Otherwise prefer the build (richer git metadata)
+            return x
+        }
     }
     
     func fetchBuildHistoryForPages(_ projects: [PagesProject], accountId: String) async throws -> [BuildStatus] {
@@ -463,7 +282,12 @@ class CloudflareService {
                     buildStatuses.append(status)
                 }
             } catch {
-                // Continue with other projects if one fails
+                DiagnosticsManager.shared.recordError(
+                    error,
+                    category: "cloudflare",
+                    message: "Skipped Pages project after deployment lookup failed",
+                    metadata: ["accountId": accountId, "project": project.name]
+                )
             }
         }
         
@@ -474,6 +298,28 @@ class CloudflareService {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .formatted(Self.apiDateFormatter)
         return decoder
+    }
+
+    private func responseError(for url: URL, response: URLResponse?) -> CloudflareError {
+        if let httpResponse = response as? HTTPURLResponse {
+            DiagnosticsManager.shared.log(
+                .error,
+                category: "cloudflare",
+                message: "Cloudflare request failed",
+                metadata: ["url": url.absoluteString, "statusCode": "\(httpResponse.statusCode)"]
+            )
+
+            return .httpError(statusCode: httpResponse.statusCode)
+        }
+
+        DiagnosticsManager.shared.log(
+            .error,
+            category: "cloudflare",
+            message: "Cloudflare request returned a non-HTTP response",
+            metadata: ["url": url.absoluteString]
+        )
+
+        return .invalidResponse
     }
 }
 

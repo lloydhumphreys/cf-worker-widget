@@ -4,22 +4,29 @@ import SwiftUI
 // Shared data manager to handle persistence and data sharing between views
 @MainActor
 class DataManager: ObservableObject {
+    enum MenuBarState {
+        case normal
+        case inProgress
+        case failed
+    }
+
     static let shared = DataManager()
     
     @Published var workersViewModel = WorkersViewModel()
     @Published var buildHistory: [BuildStatus] = []
     @Published var isLoading = false
     @Published var error: String?
-    
-    private let visibilityKey = "workerVisibilitySettings"
-    private let pagesVisibilityKey = "pagesVisibilitySettings"
+    @Published private(set) var autoRefreshEnabled: Bool
+    @Published private(set) var menuBarState: MenuBarState = .normal
+    @Published private(set) var lastRefreshStartedAt: Date?
+    @Published private(set) var lastSuccessfulRefreshAt: Date?
+
     private static let refreshIntervalKey = "refreshIntervalMinutes"
     private static let defaultRefreshMinutes = 5
 
     private var refreshTimer: Timer?
     private var lastRefreshTime: Date = Date.distantPast
-    private var autoRefreshEnabled: Bool = true
-    private static var hasExploredAPIs = false
+    private let failureHighlightWindow: TimeInterval = 30 * 60
 
     var refreshIntervalMinutes: Int {
         get {
@@ -40,40 +47,7 @@ class DataManager: ObservableObject {
     }
     
     private init() {
-        // Load saved visibility settings on initialization
-        loadVisibilitySettings()
-    }
-    
-    // MARK: - Persistence Methods
-    
-    func saveVisibilitySettings() {
-        // This method is now handled in SettingsView directly
-        // We keep this here for compatibility but it's not the primary save method
-    }
-    
-    private func loadVisibilitySettings() {
-        // This will be called after workers and pages are loaded
-    }
-    
-    func applyVisibilitySettings() {
-        guard let workerSettings = UserDefaults.standard.dictionary(forKey: visibilityKey) as? [String: Bool],
-              let pagesSettings = UserDefaults.standard.dictionary(forKey: pagesVisibilityKey) as? [String: Bool] else {
-            return
-        }
-        
-        // Apply saved settings to workers
-        for i in workersViewModel.workers.indices {
-            if let savedVisibility = workerSettings[workersViewModel.workers[i].id] {
-                workersViewModel.workers[i].isVisible = savedVisibility
-            }
-        }
-        
-        // Apply saved settings to pages projects
-        for i in workersViewModel.pagesProjects.indices {
-            if let savedVisibility = pagesSettings[workersViewModel.pagesProjects[i].id] {
-                workersViewModel.pagesProjects[i].isVisible = savedVisibility
-            }
-        }
+        autoRefreshEnabled = AppPreferences.autoRefreshEnabled
     }
     
     // MARK: - Build History Management
@@ -82,6 +56,7 @@ class DataManager: ObservableObject {
         // Load cached data immediately if available
         if let cachedData = CacheManager.shared.getCachedBuildHistory() {
             buildHistory = cachedData
+            updateDerivedState(using: cachedData)
         }
         
         // Rate limiting: don't refresh more than once per minute unless forced
@@ -91,24 +66,32 @@ class DataManager: ObservableObject {
         }
         
         lastRefreshTime = Date()
+        lastRefreshStartedAt = Date()
         isLoading = true
         error = nil
+        DiagnosticsManager.shared.log(
+            .info,
+            category: "data",
+            message: "Refreshing build history",
+            metadata: ["force": force ? "true" : "false"]
+        )
         
         // First load accounts to get the selected account ID
         await workersViewModel.loadAccounts()
+        error = workersViewModel.error
 
         guard let accountId = workersViewModel.selectedAccountId else {
             buildHistory = []
+            updateDerivedState(using: [])
             isLoading = false
             return
         }
 
         // Load workers and pages
         await workersViewModel.loadWorkers(for: accountId)
+        error = workersViewModel.error
         await workersViewModel.loadPagesProjects(for: accountId)
-
-        // Apply saved visibility settings
-        applyVisibilitySettings()
+        error = workersViewModel.error
 
         let visibleWorkers = workersViewModel.workers.filter { $0.isVisible }
         let visiblePages = workersViewModel.pagesProjects.filter { $0.isVisible }
@@ -124,6 +107,12 @@ class DataManager: ObservableObject {
                     do {
                         return try await CloudflareService.shared.fetchBuildHistoryForWorkers([worker], accountId: accountId)
                     } catch {
+                        DiagnosticsManager.shared.recordError(
+                            error,
+                            category: "data",
+                            message: "Failed to refresh worker build history",
+                            metadata: ["worker": worker.id, "accountId": accountId]
+                        )
                         return []
                     }
                 }
@@ -135,6 +124,12 @@ class DataManager: ObservableObject {
                     do {
                         return try await CloudflareService.shared.fetchBuildHistoryForPages([page], accountId: accountId)
                     } catch {
+                        DiagnosticsManager.shared.recordError(
+                            error,
+                            category: "data",
+                            message: "Failed to refresh Pages build history",
+                            metadata: ["project": page.name, "accountId": accountId]
+                        )
                         return []
                     }
                 }
@@ -145,7 +140,9 @@ class DataManager: ObservableObject {
                 if !result.isEmpty {
                     progressiveBuildHistory.append(contentsOf: result)
                     // Update UI immediately with new results
-                    buildHistory = progressiveBuildHistory.sorted { $0.createdAt > $1.createdAt }
+                    let sortedBuilds = progressiveBuildHistory.sorted { $0.createdAt > $1.createdAt }
+                    buildHistory = sortedBuilds
+                    updateDerivedState(using: sortedBuilds)
                 }
             }
         }
@@ -153,11 +150,19 @@ class DataManager: ObservableObject {
         let newBuildHistory = progressiveBuildHistory.sorted { $0.createdAt > $1.createdAt }
 
         // Check for build status changes and send notifications
-        NotificationManager.shared.checkForBuildStatusChanges(newBuildHistory)
+        NotificationManager.shared.checkForBuildStatusChanges(newBuildHistory, accountId: accountId)
 
         // Update build history and cache it
         buildHistory = newBuildHistory
         CacheManager.shared.cacheBuildHistory(newBuildHistory)
+        lastSuccessfulRefreshAt = Date()
+        updateDerivedState(using: newBuildHistory)
+        DiagnosticsManager.shared.log(
+            .info,
+            category: "data",
+            message: "Build history refresh finished",
+            metadata: ["items": "\(newBuildHistory.count)"]
+        )
         
         isLoading = false
     }
@@ -181,6 +186,8 @@ class DataManager: ObservableObject {
     
     func setAutoRefresh(enabled: Bool) {
         autoRefreshEnabled = enabled
+        AppPreferences.autoRefreshEnabled = enabled
+
         if enabled {
             startPeriodicRefresh()
         } else {
@@ -206,41 +213,28 @@ class DataManager: ObservableObject {
         refreshTimer?.invalidate()
         refreshTimer = nil
     }
-    
-    // MARK: - Build Merging
-    
-    private func mergeBuilds(existing: [BuildStatus], active: [BuildStatus]) -> [BuildStatus] {
-        var merged = existing
-        
-        for activeBuild in active {
-            // Remove any existing entry for the same project
-            merged.removeAll { existingBuild in
-                existingBuild.projectName == activeBuild.projectName && 
-                existingBuild.projectType == activeBuild.projectType
-            }
-            // Add the active build
-            merged.append(activeBuild)
-        }
-        
-        // Sort by creation date, most recent first
-        return merged.sorted { $0.createdAt > $1.createdAt }
-    }
-    
+
     // MARK: - Detail Builds
 
     func fetchRecentBuilds(for project: BuildStatus) async -> [BuildStatus] {
         guard let accountId = workersViewModel.selectedAccountId else { return [] }
 
         if project.projectType == .worker {
-            // Try Builds API first
             if let worker = workersViewModel.workers.first(where: { $0.id == project.projectName }),
                let tag = worker.tag {
-                if let builds = try? await CloudflareService.shared.fetchWorkerBuilds(accountId: accountId, workerTag: tag, limit: 10),
-                   !builds.isEmpty {
-                    return builds.map { $0.toBuildStatus(workerName: project.projectName) }
-                }
+                // Fetch both APIs concurrently and merge the results
+                async let buildsResult = CloudflareService.shared.fetchWorkerBuilds(accountId: accountId, workerTag: tag, limit: 10)
+                async let deploysResult = CloudflareService.shared.fetchWorkerDeployments(accountId: accountId, scriptName: project.projectName, limit: 10)
+
+                let builds = (try? await buildsResult) ?? []
+                let deployments = (try? await deploysResult) ?? []
+
+                let gitStatuses = builds.map { $0.toBuildStatus(workerName: project.projectName) }
+                let deployStatuses = deployments.map { $0.toBuildStatus(workerName: project.projectName) }
+
+                return mergeAndDeduplicate(builds: gitStatuses, deployments: deployStatuses)
             }
-            // Fall back to deployments API
+            // No tag — Deployments API only
             do {
                 let deployments = try await CloudflareService.shared.fetchWorkerDeployments(accountId: accountId, scriptName: project.projectName, limit: 10)
                 return deployments.map { $0.toBuildStatus(workerName: project.projectName) }
@@ -258,15 +252,29 @@ class DataManager: ObservableObject {
         }
     }
 
-    // MARK: - Settings Integration
-
-    func onWorkersLoaded() {
-        applyVisibilitySettings()
-        // Don't auto-refresh on worker load to prevent rate limiting
+    /// Merges git builds with manual (wrangler) deployments, avoiding duplicates.
+    /// Git-triggered deployments appear in both APIs, so we keep only wrangler entries from the Deployments API.
+    private func mergeAndDeduplicate(builds: [BuildStatus], deployments: [BuildStatus]) -> [BuildStatus] {
+        let manualDeploys = deployments.filter { $0.branch?.lowercased() == "wrangler" }
+        let merged = builds + manualDeploys
+        return Array(merged.sorted { $0.createdAt > $1.createdAt }.prefix(10))
     }
-    
-    func onVisibilityChanged() {
-        saveVisibilitySettings()
-        // Don't auto-refresh on every visibility change to prevent rate limiting
+
+    private func updateDerivedState(using builds: [BuildStatus]) {
+        if builds.contains(where: isRecentFailure(_:)) {
+            menuBarState = .failed
+        } else if builds.contains(where: isActiveBuild(_:)) {
+            menuBarState = .inProgress
+        } else {
+            menuBarState = .normal
+        }
+    }
+
+    private func isRecentFailure(_ build: BuildStatus) -> Bool {
+        build.status == .failure && Date().timeIntervalSince(build.createdAt) <= failureHighlightWindow
+    }
+
+    private func isActiveBuild(_ build: BuildStatus) -> Bool {
+        build.status == .inProgress || build.status == .queued
     }
 }

@@ -1,29 +1,42 @@
+import AppKit
 import Foundation
 import UserNotifications
 
-class NotificationManager {
+final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationManager()
     
     private let userDefaults = UserDefaults.standard
     private let lastKnownStatusKey = "last_known_build_status"
+    private let buildStatusCategoryIdentifier = "build_status_category"
+    private let openBuildActionIdentifier = "open_build"
     
-    private init() {}
+    private override init() {
+        super.init()
+    }
     
     // MARK: - Permission Management
     
     func requestNotificationPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        registerNotificationActions()
+
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             if granted {
-                print("✅ NotificationManager: Notification permission granted")
+                DiagnosticsManager.shared.log(.info, category: "notifications", message: "Notification permission granted")
             } else {
-                print("❌ NotificationManager: Notification permission denied: \(error?.localizedDescription ?? "Unknown error")")
+                if let error {
+                    DiagnosticsManager.shared.recordError(error, category: "notifications", message: "Notification permission request failed")
+                } else {
+                    DiagnosticsManager.shared.log(.warning, category: "notifications", message: "Notification permission denied")
+                }
             }
         }
     }
     
     // MARK: - Build Status Tracking
     
-    func checkForBuildStatusChanges(_ newBuildHistory: [BuildStatus]) {
+    func checkForBuildStatusChanges(_ newBuildHistory: [BuildStatus], accountId: String) {
         let previousStatuses = getLastKnownStatuses()
 
         // First load — save baseline without notifying
@@ -33,6 +46,7 @@ class NotificationManager {
         }
 
         var newFailures: [BuildStatus] = []
+        var recoveries: [BuildStatus] = []
 
         for build in newBuildHistory {
             let buildKey = "\(build.projectName)_\(build.projectType.rawValue)"
@@ -40,11 +54,17 @@ class NotificationManager {
 
             if build.status == .failure && previousStatus != .failure {
                 newFailures.append(build)
+            } else if build.status == .success && previousStatus == .failure {
+                recoveries.append(build)
             }
         }
 
         for failure in newFailures {
-            sendBuildFailureNotification(failure)
+            sendBuildFailureNotification(failure, accountId: accountId)
+        }
+
+        for recovery in recoveries {
+            sendBuildRecoveredNotification(recovery, accountId: accountId)
         }
 
         saveLastKnownStatuses(newBuildHistory)
@@ -80,16 +100,13 @@ class NotificationManager {
     
     // MARK: - Notification Sending
     
-    private func sendBuildFailureNotification(_ build: BuildStatus) {
+    private func sendBuildFailureNotification(_ build: BuildStatus, accountId: String) {
         let content = UNMutableNotificationContent()
         content.title = "Build Failed"
-        content.body = "\(build.projectName) (\(build.projectType.rawValue)) build has failed"
+        content.body = notificationBody(for: build, suffix: "failed")
         content.sound = .default
-        
-        // Add additional info if available
-        if let branch = build.branch {
-            content.body += " on \(branch)"
-        }
+        content.categoryIdentifier = buildStatusCategoryIdentifier
+        content.userInfo = buildUserInfo(for: build, accountId: accountId)
         
         // Create request
         let request = UNNotificationRequest(
@@ -101,51 +118,42 @@ class NotificationManager {
         // Send notification
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
-                print("❌ NotificationManager: Failed to send notification: \(error)")
+                DiagnosticsManager.shared.recordError(error, category: "notifications", message: "Failed to send build failure notification")
             } else {
-                print("✅ NotificationManager: Sent failure notification for \(build.projectName)")
+                DiagnosticsManager.shared.log(
+                    .info,
+                    category: "notifications",
+                    message: "Sent build failure notification",
+                    metadata: ["project": build.projectName]
+                )
             }
         }
     }
-    
-    func sendNewBuildNotification(_ build: BuildStatus) {
+
+    private func sendBuildRecoveredNotification(_ build: BuildStatus, accountId: String) {
         let content = UNMutableNotificationContent()
-        
-        switch build.status {
-        case .success:
-            content.title = "Build Succeeded"
-            content.body = "\(build.projectName) (\(build.projectType.rawValue)) deployed successfully"
-        case .failure:
-            content.title = "Build Failed"
-            content.body = "\(build.projectName) (\(build.projectType.rawValue)) build failed"
-        case .inProgress:
-            // Don't notify for in-progress builds to avoid spam
-            return
-        case .canceled:
-            content.title = "Build Canceled"
-            content.body = "\(build.projectName) (\(build.projectType.rawValue)) build was canceled"
-        case .queued:
-            // Don't notify for queued builds to avoid spam
-            return
-        }
-        
+        content.title = "Build Recovered"
+        content.body = notificationBody(for: build, suffix: "is back to green")
         content.sound = .default
-        
-        if let branch = build.branch {
-            content.body += " on \(branch)"
-        }
+        content.categoryIdentifier = buildStatusCategoryIdentifier
+        content.userInfo = buildUserInfo(for: build, accountId: accountId)
         
         let request = UNNotificationRequest(
-            identifier: "build_status_\(build.projectName)_\(Date().timeIntervalSince1970)",
+            identifier: "build_recovered_\(build.projectName)_\(Date().timeIntervalSince1970)",
             content: content,
             trigger: nil
         )
         
         UNUserNotificationCenter.current().add(request) { error in
             if let error = error {
-                print("❌ NotificationManager: Failed to send notification: \(error)")
+                DiagnosticsManager.shared.recordError(error, category: "notifications", message: "Failed to send build recovery notification")
             } else {
-                print("✅ NotificationManager: Sent notification for \(build.projectName)")
+                DiagnosticsManager.shared.log(
+                    .info,
+                    category: "notifications",
+                    message: "Sent build recovery notification",
+                    metadata: ["project": build.projectName]
+                )
             }
         }
     }
@@ -154,6 +162,61 @@ class NotificationManager {
     
     func clearStoredStatuses() {
         userDefaults.removeObject(forKey: lastKnownStatusKey)
-        print("🗑️ NotificationManager: Cleared stored build statuses")
+        DiagnosticsManager.shared.log(.info, category: "notifications", message: "Cleared stored build statuses")
+    }
+
+    // MARK: - Notification Actions
+
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        defer { completionHandler() }
+
+        guard response.actionIdentifier == openBuildActionIdentifier || response.actionIdentifier == UNNotificationDefaultActionIdentifier else {
+            return
+        }
+
+        guard let urlString = response.notification.request.content.userInfo["build_url"] as? String,
+              let url = URL(string: urlString) else {
+            DiagnosticsManager.shared.log(.warning, category: "notifications", message: "Notification action missing build URL")
+            return
+        }
+
+        NSWorkspace.shared.open(url)
+    }
+
+    private func registerNotificationActions() {
+        let openBuildAction = UNNotificationAction(
+            identifier: openBuildActionIdentifier,
+            title: "Open Build"
+        )
+
+        let category = UNNotificationCategory(
+            identifier: buildStatusCategoryIdentifier,
+            actions: [openBuildAction],
+            intentIdentifiers: []
+        )
+
+        UNUserNotificationCenter.current().setNotificationCategories([category])
+    }
+
+    private func buildUserInfo(for build: BuildStatus, accountId: String) -> [String: String] {
+        guard let url = BuildDestination.dashboardURL(for: build, accountId: accountId) else {
+            return [:]
+        }
+
+        return ["build_url": url.absoluteString]
+    }
+
+    private func notificationBody(for build: BuildStatus, suffix: String) -> String {
+        var body = "\(build.projectName) (\(build.projectType.rawValue)) \(suffix)"
+
+        if let branch = build.branch {
+            body += " on \(branch)"
+        }
+
+        return body
     }
 }
