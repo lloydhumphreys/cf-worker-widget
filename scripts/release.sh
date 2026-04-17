@@ -104,6 +104,9 @@ echo "==> Stapling notarization ticket..."
 xcrun stapler staple "$APP_PATH"
 xcrun stapler validate "$APP_PATH"
 
+echo "==> Stripping extended attributes to prevent AppleDouble sidecars on extraction..."
+xattr -cr "$APP_PATH"
+
 echo "==> Creating distribution zip..."
 ditto -c -k --keepParent "$APP_PATH" "$BUILD_DIR/$ZIP_NAME"
 
