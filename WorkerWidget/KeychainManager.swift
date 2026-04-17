@@ -8,18 +8,22 @@ class KeychainManager {
     private init() {}
     
     func saveApiKey(_ apiKey: String) throws {
-        let query: [String: Any] = [
+        let deleteQuery: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: "cloudflareApiKey"
+        ]
+        SecItemDelete(deleteQuery as CFDictionary)
+
+        let addQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: "cloudflareApiKey",
-            kSecValueData as String: apiKey.data(using: .utf8)!
+            kSecValueData as String: apiKey.data(using: .utf8)!,
+            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         ]
-        
-        // First try to delete any existing key
-        SecItemDelete(query as CFDictionary)
-        
-        // Then add the new key
-        let status = SecItemAdd(query as CFDictionary, nil)
+
+        let status = SecItemAdd(addQuery as CFDictionary, nil)
         guard status == errSecSuccess else {
             throw KeychainError.saveFailed(status: status)
         }

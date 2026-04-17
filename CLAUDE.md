@@ -47,4 +47,3 @@ Cloudflare API → `CloudflareService` → `DataManager` (parallel fetch, merge,
 - The app uses `NSPopover` attached to the menu bar status item — no main window.
 - Workers with Builds enabled (GitHub integration) use the Builds API for real build status with commit messages. Workers deployed via wrangler fall back to the deployments API.
 - Auto-updates via Sparkle: `SUFeedURL` in Info.plist points to `appcast.xml` in the repo. `SUPublicEDKey` must be set to the EdDSA public key before release. Generate keys with Sparkle's `generate_keys` tool.
-- Git history contains an exposed API key (noted in readme.md) — must be rotated before making the repo public.

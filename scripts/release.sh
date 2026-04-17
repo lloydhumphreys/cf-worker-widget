@@ -72,7 +72,8 @@ cat > /tmp/appcast_item.xml << ITEM
 ITEM
 
 # Insert before </channel>
-sed -i '' "/<\/channel>/r /tmp/appcast_item.xml" "$PROJECT_DIR/appcast.xml"
+awk '/<\/channel>/{system("cat /tmp/appcast_item.xml")}1' "$PROJECT_DIR/appcast.xml" > "$PROJECT_DIR/appcast.xml.tmp"
+mv "$PROJECT_DIR/appcast.xml.tmp" "$PROJECT_DIR/appcast.xml"
 rm /tmp/appcast_item.xml
 
 echo "==> Creating GitHub release..."

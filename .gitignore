@@ -1,1 +1,19 @@
-/build/.release/
+# Build output
+build/
+DerivedData/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+xcuserdata/
+*.xcuserstate
+
+# Release artifacts
+.release/
+
+# Local secrets / env
+.env
+.env.local
+*.xcconfig.local
+Secrets.swift
+
+# macOS
+.DS_Store

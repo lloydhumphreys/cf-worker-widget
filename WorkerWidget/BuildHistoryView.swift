@@ -538,11 +538,13 @@ func statusColor(for statusType: BuildStatus.BuildStatusType?) -> Color {
         .frame(width: 400, height: 500)
 }
 
+#if DEBUG
 #Preview("Offline") {
-    NetworkMonitor.shared.setOnlineForPreview(false)
-    return BuildHistoryView()
+    let _ = NetworkMonitor.shared.setOnlineForPreview(false)
+    BuildHistoryView()
         .frame(width: 400, height: 500)
 }
+#endif
 
 #Preview("Rows") {
     let now = Date()
