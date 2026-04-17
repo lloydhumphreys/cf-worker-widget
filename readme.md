@@ -4,6 +4,8 @@ A macOS menu bar app that monitors your Cloudflare Workers and Pages build/deplo
 
 Click the cloud icon in your menu bar to see the latest status of all your projects at a glance. Click into any project to see recent builds with commit messages, branches, and build times. Click a build to open it in the Cloudflare dashboard.
 
+![WorkerWidget](cf-worker-widget.png)
+
 ## Features
 
 - Live build status for Cloudflare Workers (via Builds API) and Pages projects
