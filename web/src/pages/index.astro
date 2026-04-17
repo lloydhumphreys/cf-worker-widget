@@ -642,12 +642,14 @@ import Layout from '../layouts/Layout.astro';
     font-variant-numeric: tabular-nums;
   }
 
-  /* Widget frame — glassy */
+  /* Widget frame — frosted glass */
   .widget {
     width: 400px;
-    background: rgba(244, 244, 244, 0.92);
-    backdrop-filter: blur(50px) saturate(1.5);
-    -webkit-backdrop-filter: blur(50px) saturate(1.5);
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.10) 100%),
+      rgba(238, 238, 238, 0.72);
+    backdrop-filter: blur(50px) saturate(1.8);
+    -webkit-backdrop-filter: blur(50px) saturate(1.8);
     border-radius: 12px;
     overflow: hidden;
     box-shadow:
@@ -663,21 +665,31 @@ import Layout from '../layouts/Layout.astro';
   .widget-content {
     position: relative;
     overflow: hidden;
+    padding: 4px 6px 6px;
   }
 
   .widget-view {
-    max-height: 460px;
+    max-height: 456px;
     overflow-y: auto;
+  }
+
+  /* Grouped rows container — the inset white card */
+  .widget-list,
+  .detail-builds {
+    background: rgba(255, 255, 255, 0.22);
+    border: 0.5px solid rgba(255, 255, 255, 0.55);
+    border-radius: 10px;
+    overflow: hidden;
   }
 
   .widget-detail-view {
     position: absolute;
     top: 0;
-    left: 0;
-    right: 0;
-    transform: translateX(100%);
+    left: 6px;
+    right: 6px;
+    padding-top: 4px;
+    transform: translateX(calc(100% + 12px));
     transition: transform 0.25s ease;
-    background: rgba(244, 244, 244, 0.92);
     min-height: 100%;
   }
 
@@ -692,13 +704,12 @@ import Layout from '../layouts/Layout.astro';
 
   /* Detail view rows */
   .detail-header {
-    padding: 12px 14px;
-    border-bottom: 1px solid #ddd;
+    padding: 8px 10px 10px;
   }
 
   .detail-build {
     padding: 10px 14px;
-    border-bottom: 1px solid #e8e8e8;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   }
 
   .detail-build:last-child {
@@ -769,7 +780,6 @@ import Layout from '../layouts/Layout.astro';
     height: 36px;
     flex-shrink: 0;
     background: transparent;
-    border-bottom: 1px solid #d5d5d5;
   }
 
   .toolbar-left {
@@ -804,7 +814,7 @@ import Layout from '../layouts/Layout.astro';
 
   /* Project rows */
   .widget-project {
-    border-bottom: 1px solid #ddd;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
     cursor: pointer;
     transition: background 0.15s;
   }
@@ -814,12 +824,11 @@ import Layout from '../layouts/Layout.astro';
   }
 
   .widget-project:hover > .project-row {
-    background: rgba(0, 0, 0, 0.03);
+    background: rgba(255, 255, 255, 0.35);
   }
 
   .widget-project.expanded > .project-row {
-    background: rgba(0, 0, 0, 0.03);
-    border-bottom: 1px solid #ddd;
+    background: rgba(255, 255, 255, 0.35);
   }
 
   .project-row {
@@ -864,36 +873,23 @@ import Layout from '../layouts/Layout.astro';
   .branch-badge {
     font-size: 10.5px;
     font-weight: 500;
-    padding: 1px 6px;
-    border-radius: 4px;
     display: inline-flex;
     align-items: center;
-    gap: 3px;
+    gap: 4px;
+    opacity: 0.85;
   }
 
-  .branch-badge::before {
-    font-size: 10px;
+  .branch-badge svg {
+    width: 10px;
+    height: 10px;
+    flex-shrink: 0;
   }
 
   .branch-badge.wrangler {
-    background: rgba(249, 115, 22, 0.12);
-    color: #c2410c;
-  }
-
-  .branch-badge.wrangler::before {
-    content: '\25A0';
-    font-size: 7px;
     color: #ea580c;
   }
 
   .branch-badge.main {
-    background: rgba(124, 58, 237, 0.1);
-    color: #6d28d9;
-  }
-
-  .branch-badge.main::before {
-    content: '\2191';
-    font-size: 10px;
     color: #7c3aed;
   }
 
@@ -977,6 +973,16 @@ import Layout from '../layouts/Layout.astro';
   function sc(s: string) { return s === 'Failed' ? 'status-failed' : s === 'Success' ? 'status-success' : 'status-deployed'; }
   function dc(s: string) { return s === 'Failed' ? 'red' : 'green'; }
 
+  // Branch badge — mirrors SF Symbols used in the app (terminal for wrangler, arrow.branch for git)
+  const branchIcons = {
+    wrangler: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 8 4 4-4 4"/><path d="M12 17h7"/></svg>',
+    main: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10"/><path d="M18 9c0 4-4 4.5-6 4.5"/></svg>',
+  } as const;
+  function branchBadge(branch: string) {
+    const icon = branchIcons[branch as keyof typeof branchIcons] ?? '';
+    return `<span class="branch-badge ${branch}">${icon}${branch}</span>`;
+  }
+
   const widget = document.querySelector('.widget-popover .widget')!;
   const toolbar = document.getElementById('widget-toolbar')!;
   const listView = document.getElementById('widget-list-view')!;
@@ -995,7 +1001,7 @@ import Layout from '../layouts/Layout.astro';
 
   // Render list view
   function renderList() {
-    listView.innerHTML = projects.map((p, i) => `<div class="widget-project" data-idx="${i}"><div class="project-row"><div class="project-info"><div class="project-name-line"><span class="project-name">${p.name}</span><span class="status-badge ${sc(p.status)}"><span class="status-dot ${dc(p.status)}"></span>${p.status}</span></div><div class="project-desc">${p.desc}</div><div class="project-meta"><span class="branch-badge ${p.branch}">${p.branch}</span><span class="commit-hash">${p.hash}</span><span class="time-ago">${p.time}</span></div></div></div></div>`).join('');
+    listView.innerHTML = `<div class="widget-list">${projects.map((p, i) => `<div class="widget-project" data-idx="${i}"><div class="project-row"><div class="project-info"><div class="project-name-line"><span class="project-name">${p.name}</span><span class="status-badge ${sc(p.status)}"><span class="status-dot ${dc(p.status)}"></span>${p.status}</span></div><div class="project-desc">${p.desc}</div><div class="project-meta">${branchBadge(p.branch)}<span class="commit-hash">${p.hash}</span><span class="time-ago">${p.time}</span></div></div></div></div>`).join('')}</div>`;
 
     listView.querySelectorAll('.widget-project').forEach(el => {
       el.addEventListener('click', () => {
@@ -1008,10 +1014,10 @@ import Layout from '../layouts/Layout.astro';
   // Render detail view for a project
   function showDetail(p: Project) {
     // Header: the project summary row
-    let html = `<div class="detail-header"><div class="project-info"><div class="project-name-line"><span class="project-name">${p.name}</span><span class="status-badge ${sc(p.status)}"><span class="status-dot ${dc(p.status)}"></span>${p.status}</span></div><div class="project-desc">${p.desc}</div><div class="project-meta"><span class="branch-badge ${p.branch}">${p.branch}</span><span class="commit-hash">${p.hash}</span><span class="time-ago">${p.time}</span></div></div></div>`;
+    let html = `<div class="detail-header"><div class="project-info"><div class="project-name-line"><span class="project-name">${p.name}</span><span class="status-badge ${sc(p.status)}"><span class="status-dot ${dc(p.status)}"></span>${p.status}</span></div><div class="project-desc">${p.desc}</div><div class="project-meta">${branchBadge(p.branch)}<span class="commit-hash">${p.hash}</span><span class="time-ago">${p.time}</span></div></div></div>`;
 
-    // Build rows
-    html += p.builds.map(b => `<div class="detail-build"><div class="detail-build-top"><span class="status-badge ${sc(b.status)}"><span class="status-dot ${dc(b.status)}"></span>${b.status}</span><span class="detail-build-msg">${b.msg}</span><span class="detail-build-time">${b.time}</span></div><div class="detail-build-bottom"><span class="branch-badge ${b.branch}">${b.branch}</span><span class="commit-hash">${b.hash}</span>${b.dur ? `<span class="detail-build-duration">${b.dur}</span>` : ''}</div></div>`).join('');
+    // Build rows grouped in a rounded container
+    html += `<div class="detail-builds">` + p.builds.map(b => `<div class="detail-build"><div class="detail-build-top"><span class="status-badge ${sc(b.status)}"><span class="status-dot ${dc(b.status)}"></span>${b.status}</span><span class="detail-build-msg">${b.msg}</span><span class="detail-build-time">${b.time}</span></div><div class="detail-build-bottom">${branchBadge(b.branch)}<span class="commit-hash">${b.hash}</span>${b.dur ? `<span class="detail-build-duration">${b.dur}</span>` : ''}</div></div>`).join('') + `</div>`;
 
     detailView.innerHTML = html;
     detailView.scrollTop = 0;
