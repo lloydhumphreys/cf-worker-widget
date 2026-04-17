@@ -6,6 +6,7 @@ import SwiftUI
 class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverDelegate {
     var statusBarItem: NSStatusItem?
     var popover: NSPopover?
+    private var statusBarMenu: NSMenu?
     private var cancellables = Set<AnyCancellable>()
     private var hasPendingUpdateBadge = false
     private var currentMenuBarState: DataManager.MenuBarState = .normal
@@ -53,10 +54,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverDelegat
         statusBarItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusBarItem?.button {
             button.action = #selector(statusBarButtonClicked(_:))
+            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
             button.target = self
 
             updateStatusBarAppearance()
         }
+
+        let menu = NSMenu()
+        menu.addItem(NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates), keyEquivalent: ""))
+        menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: "Quit WorkerWidget", action: #selector(quitApp), keyEquivalent: "q"))
+        statusBarItem?.menu = nil
+        self.statusBarMenu = menu
 
         DataManager.shared.$menuBarState
             .receive(on: RunLoop.main)
@@ -68,14 +77,33 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverDelegat
     }
 
     @objc func statusBarButtonClicked(_ sender: NSStatusBarButton) {
-        guard let popover = popover else { return }
+        guard let event = NSApp.currentEvent else { return }
 
+        if event.type == .rightMouseUp {
+            // Show context menu on right-click
+            if let menu = statusBarMenu {
+                statusBarItem?.menu = menu
+                statusBarItem?.button?.performClick(nil)
+                statusBarItem?.menu = nil
+            }
+            return
+        }
+
+        guard let popover = popover else { return }
         if popover.isShown {
             popover.performClose(sender)
         } else {
             popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
         }
+    }
+
+    @objc private func checkForUpdates() {
+        updaterController.checkForUpdates(nil)
+    }
+
+    @objc private func quitApp() {
+        NSApp.terminate(nil)
     }
 
     private func updateStatusBarAppearance() {
