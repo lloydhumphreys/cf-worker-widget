@@ -23,5 +23,17 @@
                 type="application/octet-stream"
             />
         </item>
+        <item>
+            <title>Version 1.0.1</title>
+            <pubDate>Fri, 17 Apr 2026 13:09:43 +0200</pubDate>
+            <enclosure
+                url="https://github.com/lloydhumphreys/cf-worker-widget/releases/download/v1.0.1/WorkerWidget-1.0.1.zip"
+                sparkle:version="1.0.1"
+                sparkle:shortVersionString="1.0.1"
+                sparkle:edSignature="gMBB/XNvFHeBj/kaG/KzU5b9WCqv3RfkdpmF7skqdmfhQoQSDVah9PpfWEAGIArYpuGCkTHF+d9Zv80FrC/qBw=="
+                length="3104636"
+                type="application/octet-stream"
+            />
+        </item>
     </channel>
 </rss>
