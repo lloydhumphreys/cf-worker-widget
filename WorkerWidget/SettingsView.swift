@@ -49,6 +49,10 @@ struct SettingsView: View {
     }
     
     private func loadApiKey() {
+        guard KeychainManager.isApiKeyConfigured else {
+            apiKey = ""
+            return
+        }
         do {
             apiKey = try KeychainManager.shared.getApiKey() ?? ""
         } catch {
@@ -127,12 +131,25 @@ struct ConnectionView: View {
             }
 
             Section {
-                CheckForUpdatesView()
+                HStack {
+                    CheckForUpdatesView()
+                    Spacer()
+                    Text(appVersionString)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             } footer: {
                 Text("Check for new versions of WorkerWidget.")
             }
         }
         .padding()
+    }
+
+    private var appVersionString: String {
+        let info = Bundle.main.infoDictionary
+        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        return "Version \(version) (\(build))"
     }
 
     private func saveApiKey() {
@@ -141,6 +158,10 @@ struct ConnectionView: View {
             CloudflareService.shared.clearCachedApiKey()
             errorMessage = nil
             DiagnosticsManager.shared.log(.info, category: "settings", message: "Saved Cloudflare API key")
+
+            // Launch skips the auto-refresh timer when no key exists, so
+            // (re)start it here once the user has provided one.
+            DataManager.shared.setAutoRefresh(enabled: DataManager.shared.autoRefreshEnabled)
 
             // Trigger loading of accounts after successful save
             NotificationCenter.default.post(name: .apiKeyUpdated, object: nil)
@@ -258,7 +279,7 @@ struct WorkersView: View {
 // MARK: - Sparkle Update View
 
 struct CheckForUpdatesView: View {
-    @ObservedObject private var checkForUpdatesViewModel = CheckForUpdatesViewModel()
+    @StateObject private var checkForUpdatesViewModel = CheckForUpdatesViewModel()
 
     var body: some View {
         Button("Check for Updates...") {

@@ -24,6 +24,12 @@ class CloudflareService {
         if let cached = cachedApiKey {
             return cached
         }
+        // Short-circuit before touching the keychain so callers on the
+        // refresh path never trigger a macOS access prompt when nothing
+        // has been saved yet.
+        guard KeychainManager.isApiKeyConfigured else {
+            throw CloudflareError.noApiKey
+        }
         guard let apiKey = try KeychainManager.shared.getApiKey(), !apiKey.isEmpty else {
             throw CloudflareError.noApiKey
         }

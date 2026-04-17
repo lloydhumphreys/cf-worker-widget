@@ -4,9 +4,17 @@ import Security
 class KeychainManager {
     static let shared = KeychainManager()
     private let service = "com.workerwidget"
-    
+    private static let configuredDefaultsKey = "apiKeyConfigured"
+
     private init() {}
-    
+
+    // UserDefaults-backed flag so the rest of the app can branch on "is a
+    // key set?" without hitting the keychain — which would prompt the user
+    // on ACL mismatch even when there is nothing stored yet.
+    static var isApiKeyConfigured: Bool {
+        UserDefaults.standard.bool(forKey: configuredDefaultsKey)
+    }
+
     func saveApiKey(_ apiKey: String) throws {
         let deleteQuery: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -27,6 +35,7 @@ class KeychainManager {
         guard status == errSecSuccess else {
             throw KeychainError.saveFailed(status: status)
         }
+        UserDefaults.standard.set(true, forKey: Self.configuredDefaultsKey)
     }
     
     func getApiKey() throws -> String? {
@@ -63,6 +72,7 @@ class KeychainManager {
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw KeychainError.deleteFailed(status: status)
         }
+        UserDefaults.standard.set(false, forKey: Self.configuredDefaultsKey)
     }
 }
 

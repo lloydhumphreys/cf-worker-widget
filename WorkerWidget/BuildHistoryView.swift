@@ -159,7 +159,7 @@ struct BuildHistoryView: View {
     }
 
     private var hasApiKey: Bool {
-        (try? KeychainManager.shared.getApiKey()) != nil
+        KeychainManager.isApiKeyConfigured
     }
 
     @ViewBuilder

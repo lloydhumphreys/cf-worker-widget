@@ -39,9 +39,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverDelegat
         NotificationManager.shared.requestNotificationPermission()
         DiagnosticsManager.shared.log(.info, category: "app", message: "Application did finish launching")
 
-        Task {
-            await DataManager.shared.refreshBuildHistory(force: true)
-            DataManager.shared.setAutoRefresh(enabled: DataManager.shared.autoRefreshEnabled)
+        // Materialize the Sparkle controller now so background checks run
+        // and `canCheckForUpdates` has settled to true by the time Settings
+        // first opens.
+        _ = updaterController
+
+        // Only fire the launch refresh / auto-refresh timer once the user
+        // has saved a key. Otherwise every refresh would cascade into a
+        // keychain read that macOS may prompt on. The first save in
+        // SettingsView starts auto-refresh itself.
+        if KeychainManager.isApiKeyConfigured {
+            Task {
+                await DataManager.shared.refreshBuildHistory(force: true)
+                DataManager.shared.setAutoRefresh(enabled: DataManager.shared.autoRefreshEnabled)
+            }
         }
 
         let popover = NSPopover()
