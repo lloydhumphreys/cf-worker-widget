@@ -15,7 +15,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 BUILD_DIR="$PROJECT_DIR/.release"
 APP_NAME="WorkerWidget"
-ZIP_NAME="$APP_NAME-$VERSION.zip"
+DMG_NAME="$APP_NAME-$VERSION.dmg"
 TEAM_ID="KG8J865MZ3"
 NOTARY_PROFILE="WorkerWidget"
 SPARKLE_BIN="$(find ~/Library/Developer/Xcode/DerivedData/WorkerWidget-* -path '*/artifacts/sparkle/Sparkle/bin' -type d 2>/dev/null | head -1)"
@@ -100,19 +100,52 @@ if ! echo "$SUBMIT_OUTPUT" | grep -q "status: Accepted"; then
     exit 1
 fi
 
-echo "==> Stapling notarization ticket..."
+echo "==> Stapling app notarization ticket..."
 xcrun stapler staple "$APP_PATH"
 xcrun stapler validate "$APP_PATH"
 
-echo "==> Creating distribution zip..."
-# --sequesterRsrc stashes Apple metadata under __MACOSX/ rather than inline
-# ._* sidecars, so extraction with plain unzip/Archive Utility cannot leave
-# unsealed files inside embedded frameworks. This is Sparkle's recommended
-# packaging command.
-ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$BUILD_DIR/$ZIP_NAME"
+echo "==> Building DMG..."
+# Drag-to-Applications layout avoids App Translocation on first launch.
+# UDZO is the standard compressed format; Sparkle's SPUDiskImageUnarchiver
+# mounts it, copies the app out, and unmounts on the update path.
+DMG_PATH="$BUILD_DIR/$DMG_NAME"
+DMG_STAGE="$BUILD_DIR/dmg-stage"
+rm -rf "$DMG_STAGE"
+mkdir -p "$DMG_STAGE"
+cp -R "$APP_PATH" "$DMG_STAGE/"
+ln -s /Applications "$DMG_STAGE/Applications"
+hdiutil create \
+    -volname "$APP_NAME" \
+    -srcfolder "$DMG_STAGE" \
+    -ov \
+    -format UDZO \
+    -fs HFS+ \
+    "$DMG_PATH" >/dev/null
+
+echo "==> Signing DMG with Developer ID..."
+codesign --force --sign "Developer ID Application: Cartographer ApS ($TEAM_ID)" "$DMG_PATH"
+
+echo "==> Submitting DMG to Apple notary service..."
+DMG_SUBMIT_OUTPUT=$(xcrun notarytool submit "$DMG_PATH" \
+    --keychain-profile "$NOTARY_PROFILE" \
+    --wait)
+echo "$DMG_SUBMIT_OUTPUT"
+
+if ! echo "$DMG_SUBMIT_OUTPUT" | grep -q "status: Accepted"; then
+    echo "Error: DMG notarization did not succeed."
+    DMG_SUBMISSION_ID=$(echo "$DMG_SUBMIT_OUTPUT" | grep -m1 'id:' | awk '{print $2}')
+    if [ -n "${DMG_SUBMISSION_ID:-}" ]; then
+        xcrun notarytool log "$DMG_SUBMISSION_ID" --keychain-profile "$NOTARY_PROFILE" || true
+    fi
+    exit 1
+fi
+
+echo "==> Stapling DMG..."
+xcrun stapler staple "$DMG_PATH"
+xcrun stapler validate "$DMG_PATH"
 
 echo "==> Signing update with Sparkle..."
-SIGN_OUTPUT=$("$SPARKLE_BIN/sign_update" "$BUILD_DIR/$ZIP_NAME")
+SIGN_OUTPUT=$("$SPARKLE_BIN/sign_update" "$DMG_PATH")
 echo "$SIGN_OUTPUT"
 
 ED_SIGNATURE=$(echo "$SIGN_OUTPUT" | grep -o 'sparkle:edSignature="[^"]*"' | cut -d'"' -f2)
@@ -123,7 +156,7 @@ if [ -z "$ED_SIGNATURE" ] || [ -z "$LENGTH" ]; then
     exit 1
 fi
 
-DOWNLOAD_URL="https://github.com/lloydhumphreys/cf-worker-widget/releases/download/v$VERSION/$ZIP_NAME"
+DOWNLOAD_URL="https://github.com/lloydhumphreys/cf-worker-widget/releases/download/v$VERSION/$DMG_NAME"
 PUB_DATE=$(date -R)
 
 echo "==> Updating appcast.xml..."
@@ -137,7 +170,7 @@ cat > /tmp/appcast_item.xml << ITEM
                 sparkle:shortVersionString="$VERSION"
                 sparkle:edSignature="$ED_SIGNATURE"
                 length="$LENGTH"
-                type="application/octet-stream"
+                type="application/x-apple-diskimage"
             />
         </item>
 ITEM
@@ -155,7 +188,7 @@ git push origin HEAD --tags
 
 echo "==> Creating GitHub release..."
 gh release create "v$VERSION" \
-    "$BUILD_DIR/$ZIP_NAME" \
+    "$DMG_PATH" \
     --title "v$VERSION" \
     --generate-notes
 
