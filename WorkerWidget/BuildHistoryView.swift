@@ -80,14 +80,18 @@ struct BuildHistoryView: View {
                     .padding(.horizontal, 6)
             }
 
-            Divider().opacity(0.5)
-
             // Content
             if selectedProject != nil {
                 ScrollView {
-                    LazyVStack(spacing: 2) {
+                    LazyVStack(spacing: 0) {
                         detailContent
                     }
+                    .background(listContainerBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(.white.opacity(0.25), lineWidth: 0.5)
+                    )
                     .padding(.horizontal, 6)
                     .padding(.vertical, 4)
                 }
@@ -95,16 +99,31 @@ struct BuildHistoryView: View {
                 listContent
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 2) {
+                    LazyVStack(spacing: 0) {
                         listContent
                     }
+                    .background(listContainerBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .strokeBorder(.white.opacity(0.25), lineWidth: 0.5)
+                    )
                     .padding(.horizontal, 6)
                     .padding(.vertical, 4)
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.background.opacity(0.6))
+        .background {
+            ZStack {
+                Rectangle().fill(.ultraThinMaterial)
+                LinearGradient(
+                    colors: [.white.opacity(0.18), .white.opacity(0.04)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            }
+        }
         .onAppear {
             if dataManager.buildHistory.isEmpty {
                 Task {
@@ -115,6 +134,11 @@ struct BuildHistoryView: View {
     }
 
     // MARK: - List Content
+
+    private var listContainerBackground: some View {
+        RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .fill(.white.opacity(0.20))
+    }
 
     private var hasApiKey: Bool {
         (try? KeychainManager.shared.getApiKey()) != nil
@@ -192,7 +216,8 @@ struct BuildHistoryView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 40)
         } else {
-            ForEach(dataManager.buildHistory.prefix(14)) { buildStatus in
+            let items = Array(dataManager.buildHistory.prefix(14))
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, buildStatus in
                 BuildHistoryRow(buildStatus: buildStatus)
                     .contentShape(Rectangle())
                     .onTapGesture {
@@ -209,6 +234,9 @@ struct BuildHistoryView: View {
                             }
                         }
                     }
+                if index < items.count - 1 {
+                    Divider().opacity(0.35)
+                }
             }
         }
     }
@@ -239,7 +267,7 @@ struct BuildHistoryView: View {
             .frame(maxWidth: .infinity)
             .padding(.vertical, 40)
         } else {
-            ForEach(detailBuilds) { build in
+            ForEach(Array(detailBuilds.enumerated()), id: \.element.id) { index, build in
                 DetailBuildRow(build: build, onOpen: {
                     openBuildInBrowser(build)
                 })
@@ -247,6 +275,9 @@ struct BuildHistoryView: View {
                     .onTapGesture {
                         openBuildInBrowser(build)
                     }
+                if index < detailBuilds.count - 1 {
+                    Divider().opacity(0.35)
+                }
             }
         }
     }
@@ -325,8 +356,8 @@ struct BuildHistoryRow: View {
         .padding(.vertical, 8)
         .padding(.horizontal, 10)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isHovered ? Color.primary.opacity(0.06) : Color.clear)
+            Rectangle()
+                .fill(.white.opacity(isHovered ? 0.14 : 0))
         )
         .help(buildStatus.commitMessage ?? "")
         .onHover { hovering in
@@ -411,7 +442,7 @@ struct DetailBuildRow: View {
 
             if let onOpen {
                 Button(action: onOpen) {
-                    Image(systemName: "arrow.up.forward.square")
+                    Image(systemName: "arrow.up.right")
                         .font(.system(size: 12, weight: .medium))
                 }
                 .buttonStyle(.plain)
@@ -422,8 +453,8 @@ struct DetailBuildRow: View {
         .padding(.vertical, 6)
         .padding(.horizontal, 10)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isHovered ? Color.primary.opacity(0.06) : Color.clear)
+            Rectangle()
+                .fill(.white.opacity(isHovered ? 0.14 : 0))
         )
         .onHover { hovering in
             withAnimation(.easeInOut(duration: 0.15)) {
@@ -484,7 +515,77 @@ func statusColor(for statusType: BuildStatus.BuildStatusType?) -> Color {
     }
 }
 
-#Preview {
+#Preview("Build History") {
     BuildHistoryView()
         .frame(width: 400, height: 500)
+}
+
+#Preview("Rows") {
+    let now = Date()
+    let samples: [BuildStatus] = [
+        BuildStatus(
+            id: "1", projectId: "api-worker", projectName: "api-worker",
+            projectType: .worker, status: .success,
+            createdAt: now.addingTimeInterval(-300),
+            completedAt: now.addingTimeInterval(-270),
+            environment: "production", deploymentId: "1",
+            commitHash: "a1b2c3d4e5f6", branch: "main",
+            commitMessage: "Fix rate limiting on auth endpoint"
+        ),
+        BuildStatus(
+            id: "2", projectId: "marketing-site", projectName: "marketing-site",
+            projectType: .pages, status: .failure,
+            createdAt: now.addingTimeInterval(-1800),
+            completedAt: now.addingTimeInterval(-1750),
+            environment: "production", deploymentId: "2",
+            commitHash: "9f8e7d6c5b4a", branch: "preview/redesign",
+            commitMessage: "Try new hero section layout"
+        ),
+        BuildStatus(
+            id: "3", projectId: "edge-router", projectName: "edge-router",
+            projectType: .worker, status: .inProgress,
+            createdAt: now.addingTimeInterval(-30),
+            completedAt: nil,
+            environment: "production", deploymentId: "3",
+            commitHash: "1122334455", branch: "wrangler",
+            commitMessage: nil
+        ),
+        BuildStatus(
+            id: "4", projectId: "docs", projectName: "docs",
+            projectType: .pages, status: .queued,
+            createdAt: now.addingTimeInterval(-5),
+            completedAt: nil,
+            environment: "production", deploymentId: "4",
+            commitHash: "deadbeef00", branch: "main",
+            commitMessage: "Add migration guide for v2"
+        ),
+    ]
+
+    return VStack(spacing: 8) {
+        ForEach(samples) { sample in
+            BuildHistoryRow(buildStatus: sample)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(.white.opacity(0.65))
+                        .background(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .fill(.ultraThinMaterial)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .strokeBorder(.white.opacity(0.5), lineWidth: 0.5)
+                        )
+                        .shadow(color: .black.opacity(0.05), radius: 4, y: 1)
+                )
+        }
+    }
+    .padding(16)
+    .frame(width: 400)
+    .background(
+        LinearGradient(
+            colors: [.blue.opacity(0.4), .purple.opacity(0.3), .pink.opacity(0.2)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    )
 }
