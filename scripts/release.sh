@@ -104,11 +104,12 @@ echo "==> Stapling notarization ticket..."
 xcrun stapler staple "$APP_PATH"
 xcrun stapler validate "$APP_PATH"
 
-echo "==> Stripping extended attributes to prevent AppleDouble sidecars on extraction..."
-xattr -cr "$APP_PATH"
-
 echo "==> Creating distribution zip..."
-ditto -c -k --keepParent "$APP_PATH" "$BUILD_DIR/$ZIP_NAME"
+# --sequesterRsrc stashes Apple metadata under __MACOSX/ rather than inline
+# ._* sidecars, so extraction with plain unzip/Archive Utility cannot leave
+# unsealed files inside embedded frameworks. This is Sparkle's recommended
+# packaging command.
+ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$BUILD_DIR/$ZIP_NAME"
 
 echo "==> Signing update with Sparkle..."
 SIGN_OUTPUT=$("$SPARKLE_BIN/sign_update" "$BUILD_DIR/$ZIP_NAME")
