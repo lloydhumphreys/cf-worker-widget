@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import Combine
 
 // Shared data manager to handle persistence and data sharing between views
 @MainActor
@@ -27,6 +28,7 @@ class DataManager: ObservableObject {
     private var refreshTimer: Timer?
     private var lastRefreshTime: Date = Date.distantPast
     private let failureHighlightWindow: TimeInterval = 30 * 60
+    private var networkCancellable: AnyCancellable?
 
     var refreshIntervalMinutes: Int {
         get {
@@ -48,6 +50,21 @@ class DataManager: ObservableObject {
     
     private init() {
         autoRefreshEnabled = AppPreferences.autoRefreshEnabled
+
+        networkCancellable = NetworkMonitor.shared.$isOnline
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] online in
+                guard let self, online else { return }
+                DiagnosticsManager.shared.log(
+                    .info,
+                    category: "network",
+                    message: "Connectivity restored; refreshing"
+                )
+                Task { [weak self] in
+                    await self?.refreshBuildHistory(force: true)
+                }
+            }
     }
     
     // MARK: - Build History Management
@@ -57,6 +74,13 @@ class DataManager: ObservableObject {
         if let cachedData = CacheManager.shared.getCachedBuildHistory() {
             buildHistory = cachedData
             updateDerivedState(using: cachedData)
+        }
+
+        // Offline: keep cached data, don't hit the network
+        if !NetworkMonitor.shared.isOnline {
+            isLoading = false
+            error = nil
+            return
         }
         
         // Rate limiting: don't refresh more than once per minute unless forced

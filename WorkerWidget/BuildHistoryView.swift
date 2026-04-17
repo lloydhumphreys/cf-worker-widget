@@ -5,6 +5,7 @@ struct BuildHistoryView: View {
     @State private var detailBuilds: [BuildStatus] = []
     @State private var loadingDetail = false
     @StateObject private var dataManager = DataManager.shared
+    @StateObject private var networkMonitor = NetworkMonitor.shared
 
     var body: some View {
         VStack(spacing: 0) {
@@ -63,6 +64,23 @@ struct BuildHistoryView: View {
                     .buttonStyle(.plain)
 
                     Spacer()
+                }
+
+                if !networkMonitor.isOnline {
+                    HStack(spacing: 4) {
+                        Image(systemName: "wifi.slash")
+                            .font(.system(size: 10, weight: .semibold))
+                        Text("Offline")
+                            .font(.system(size: 11, weight: .medium))
+                    }
+                    .foregroundColor(.orange)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(
+                        Capsule()
+                            .fill(.orange.opacity(0.15))
+                    )
+                    .help("No internet connection — showing cached data")
                 }
 
                 SettingsLink {
@@ -517,6 +535,12 @@ func statusColor(for statusType: BuildStatus.BuildStatusType?) -> Color {
 
 #Preview("Build History") {
     BuildHistoryView()
+        .frame(width: 400, height: 500)
+}
+
+#Preview("Offline") {
+    NetworkMonitor.shared.setOnlineForPreview(false)
+    return BuildHistoryView()
         .frame(width: 400, height: 500)
 }
 
