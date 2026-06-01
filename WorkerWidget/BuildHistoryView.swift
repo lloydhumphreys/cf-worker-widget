@@ -6,6 +6,15 @@ struct BuildHistoryView: View {
     @State private var loadingDetail = false
     @StateObject private var dataManager = DataManager.shared
     @StateObject private var networkMonitor = NetworkMonitor.shared
+    @Environment(\.openSettings) private var openSettings
+
+    /// Opens the Settings window and brings the app forward. As an accessory
+    /// (LSUIElement) app we never auto-activate, so without this the Settings
+    /// window opens behind whatever app is frontmost.
+    private func showSettings() {
+        NSApp.activate(ignoringOtherApps: true)
+        openSettings()
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -83,7 +92,7 @@ struct BuildHistoryView: View {
                     .help("No internet connection — showing cached data")
                 }
 
-                SettingsLink {
+                Button(action: showSettings) {
                     Image(systemName: "gearshape")
                         .font(.system(size: 13, weight: .medium))
                 }
@@ -192,9 +201,7 @@ struct BuildHistoryView: View {
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
 
-                    SettingsLink {
-                        Text("Add API Key")
-                    }
+                    Button("Add API Key", action: showSettings)
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
