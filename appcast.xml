@@ -84,18 +84,6 @@
             />
         </item>
         <item>
-            <title>Version 1.0.6</title>
-            <pubDate>Mon, 01 Jun 2026 12:17:29 +0200</pubDate>
-            <enclosure
-                url="https://github.com/lloydhumphreys/cf-worker-widget/releases/download/v1.0.6/WorkerWidget-1.0.6.dmg"
-                sparkle:version="5"
-                sparkle:shortVersionString="1.0.6"
-                sparkle:edSignature="RnmjdiC0oLhf8umgel+bKVsrH/k28T33mT5IoTelwiigmm4Pn5FFGktQtzSvb4oEHpIV47XDeH02VxUZ66fSCA=="
-                length="3140407"
-                type="application/x-apple-diskimage"
-            />
-        </item>
-        <item>
             <title>Version 1.0.7</title>
             <pubDate>Mon, 01 Jun 2026 12:26:25 +0200</pubDate>
             <enclosure
@@ -104,18 +92,6 @@
                 sparkle:shortVersionString="1.0.7"
                 sparkle:edSignature="XWcLVqAuWVeevmSAXqKvmg8ermBHdzwokusfhPAT4yA8RWyCpudDSX2nqeixnjLMWlCQ0Bgjpe2hERWXuwwQBw=="
                 length="3140014"
-                type="application/x-apple-diskimage"
-            />
-        </item>
-        <item>
-            <title>Version 1.0.8</title>
-            <pubDate>Mon, 01 Jun 2026 12:28:44 +0200</pubDate>
-            <enclosure
-                url="https://github.com/lloydhumphreys/cf-worker-widget/releases/download/v1.0.8/WorkerWidget-1.0.8.dmg"
-                sparkle:version="7"
-                sparkle:shortVersionString="1.0.8"
-                sparkle:edSignature="3YqsTp6JeybG0hWQIcvKX6gPzeTzcV1z8f/ET+8V+6aFkRf3uP8E4BkVls7V7txT16iP5WWa318AjgUtWRDGBg=="
-                length="3140012"
                 type="application/x-apple-diskimage"
             />
         </item>
