@@ -2,27 +2,19 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>com.apple.security.app-sandbox</key>
-	<true/>
-	<key>com.apple.security.files.user-selected.read-only</key>
-	<true/>
-	<key>com.apple.security.network.client</key>
-	<true/>
-	<key>com.apple.security.network.server</key>
-	<true/>
 	<!--
-		Sparkle auto-updates from inside the sandbox. These allow the app to reach
-		Sparkle's installer XPC services (org.sparkle-project.InstallerLauncher),
-		which run outside the sandbox and perform the privileged install. Without
-		them the sandbox denies the -spk* mach-lookups and Sparkle falls back to the
-		(also-denied) authorization path, producing "Update error!".
-		See https://sparkle-project.org/documentation/sandboxing/
+		Intentionally NOT sandboxed.
+
+		The app ships with Developer ID + hardened runtime (notarized) and is
+		distributed via DMG/GitHub, not the Mac App Store, so the sandbox is
+		optional. Sandboxing broke Sparkle auto-updates: a sandboxed app can't
+		reach Sparkle's installer XPC services (SPM doesn't name them per-app, so
+		the -spk* mach lookup returns "No such process") and can't obtain the
+		installer authorization right, so updates failed with "Update error!".
+		Without the sandbox, Sparkle's standard installer works.
+
+		Hardened runtime stays enabled via the ENABLE_HARDENED_RUNTIME build
+		setting (required for notarization); no app entitlements are needed.
 	-->
-	<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
-	<array>
-		<string>com.lloydhumphreys.WorkerWidget-spks</string>
-		<string>com.lloydhumphreys.WorkerWidget-spki</string>
-		<string>com.lloydhumphreys.WorkerWidget-spkp</string>
-	</array>
 </dict>
 </plist>
