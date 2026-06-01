@@ -10,5 +10,19 @@
 	<true/>
 	<key>com.apple.security.network.server</key>
 	<true/>
+	<!--
+		Sparkle auto-updates from inside the sandbox. These allow the app to reach
+		Sparkle's installer XPC services (org.sparkle-project.InstallerLauncher),
+		which run outside the sandbox and perform the privileged install. Without
+		them the sandbox denies the -spk* mach-lookups and Sparkle falls back to the
+		(also-denied) authorization path, producing "Update error!".
+		See https://sparkle-project.org/documentation/sandboxing/
+	-->
+	<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
+	<array>
+		<string>com.lloydhumphreys.WorkerWidget-spks</string>
+		<string>com.lloydhumphreys.WorkerWidget-spki</string>
+		<string>com.lloydhumphreys.WorkerWidget-spkp</string>
+	</array>
 </dict>
 </plist>
