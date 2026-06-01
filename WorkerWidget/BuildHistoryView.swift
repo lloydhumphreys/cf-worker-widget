@@ -506,8 +506,10 @@ func statusIcon(for statusType: BuildStatus.BuildStatusType?) -> some View {
             Image(systemName: "xmark.circle.fill")
                 .foregroundColor(.red)
         case .inProgress:
-            Image(systemName: "progress.indicator")
-                .foregroundColor(.blue)
+            ProgressView()
+                .controlSize(.small)
+                .scaleEffect(0.7)
+                .frame(width: 12, height: 12)
         case .canceled:
             Image(systemName: "minus.circle.fill")
                 .foregroundColor(.secondary)

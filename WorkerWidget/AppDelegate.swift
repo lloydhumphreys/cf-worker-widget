@@ -139,13 +139,28 @@ class AppDelegate: NSObject, NSApplicationDelegate, SPUStandardUserDriverDelegat
             tintColor = nil
         }
 
-        if let image = NSImage(systemSymbolName: imageName, accessibilityDescription: accessibilityDescription) {
-            image.size = NSSize(width: 18, height: 18)
-            image.isTemplate = true
-            button.image = image
-            button.contentTintColor = tintColor
-        } else {
+        guard let image = NSImage(systemSymbolName: imageName, accessibilityDescription: accessibilityDescription) else {
+            button.image = nil
             button.title = "WW"
+            return
+        }
+        image.size = NSSize(width: 18, height: 18)
+
+        // Never rely on contentTintColor to reset to the automatic template tint —
+        // on a status bar button it doesn't reliably restore, leaving the template
+        // drawn in black (invisible on a dark/translucent menu bar). Instead, bake
+        // the alert color into the image and keep a clean template for the normal state.
+        button.contentTintColor = nil
+
+        if let tintColor {
+            let config = NSImage.SymbolConfiguration(paletteColors: [tintColor])
+            let colored = image.withSymbolConfiguration(config) ?? image
+            colored.size = NSSize(width: 18, height: 18)
+            colored.isTemplate = false
+            button.image = colored
+        } else {
+            image.isTemplate = true // auto-adapts to the menu bar appearance
+            button.image = image
         }
     }
 }

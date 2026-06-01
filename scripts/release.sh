@@ -81,6 +81,21 @@ echo "==> Verifying Developer ID signature..."
 codesign --verify --deep --strict --verbose=2 "$APP_PATH"
 codesign --display --verbose=2 "$APP_PATH" 2>&1 | grep -E 'Authority|TeamIdentifier'
 
+# Read the real version identifiers baked into the app. Sparkle compares
+# sparkle:version against the installed app's CFBundleVersion (a monotonic
+# build number), NOT the marketing string — so the appcast must advertise the
+# build number, with the marketing version shown via sparkle:shortVersionString.
+APP_PLIST="$APP_PATH/Contents/Info.plist"
+BUILD_NUMBER=$(/usr/libexec/PlistBuddy -c "Print CFBundleVersion" "$APP_PLIST")
+SHORT_VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$APP_PLIST")
+
+if [ "$SHORT_VERSION" != "$VERSION" ]; then
+    echo "Error: MARKETING_VERSION ($SHORT_VERSION) does not match release version ($VERSION)."
+    echo "Bump MARKETING_VERSION in the Xcode project to $VERSION before releasing."
+    exit 1
+fi
+echo "    Marketing version: $SHORT_VERSION, build number: $BUILD_NUMBER"
+
 echo "==> Submitting to Apple notary service (this may take several minutes)..."
 NOTARY_ZIP="$BUILD_DIR/${APP_NAME}-notarize.zip"
 ditto -c -k --keepParent "$APP_PATH" "$NOTARY_ZIP"
@@ -166,8 +181,8 @@ cat > /tmp/appcast_item.xml << ITEM
             <pubDate>$PUB_DATE</pubDate>
             <enclosure
                 url="$DOWNLOAD_URL"
-                sparkle:version="$VERSION"
-                sparkle:shortVersionString="$VERSION"
+                sparkle:version="$BUILD_NUMBER"
+                sparkle:shortVersionString="$SHORT_VERSION"
                 sparkle:edSignature="$ED_SIGNATURE"
                 length="$LENGTH"
                 type="application/x-apple-diskimage"

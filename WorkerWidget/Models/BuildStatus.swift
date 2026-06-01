@@ -43,7 +43,7 @@ struct BuildStatus: Identifiable, Codable {
             case (.success, .pages): return "Success"
             case (.failure, .worker): return "Failed"
             case (.failure, .pages): return "Failed"
-            case (.inProgress, .worker): return "Rolling Out"
+            case (.inProgress, .worker): return "Running"
             case (.inProgress, .pages): return "Building"
             case (.canceled, _): return "Canceled"
             case (.queued, .worker): return "Pending"
