@@ -71,5 +71,17 @@
                 type="application/x-apple-diskimage"
             />
         </item>
+        <item>
+            <title>Version 1.0.5</title>
+            <pubDate>Mon, 01 Jun 2026 12:04:47 +0200</pubDate>
+            <enclosure
+                url="https://github.com/lloydhumphreys/cf-worker-widget/releases/download/v1.0.5/WorkerWidget-1.0.5.dmg"
+                sparkle:version="4"
+                sparkle:shortVersionString="1.0.5"
+                sparkle:edSignature="H6AHKsSO7UM1PY4K0mIJZ8ARteOmmwFEU8Fnjywr0eM/v5FNy6kbUgeo0XlIg/hQ2ZqWaByO/aPwHHGGLCH3Bg=="
+                length="3140589"
+                type="application/x-apple-diskimage"
+            />
+        </item>
     </channel>
 </rss>
